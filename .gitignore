@@ -1,0 +1,9 @@
+results/
+*.fig
+*.png
+*.asv
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
