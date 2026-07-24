@@ -12,6 +12,8 @@ clear all; close all; clc;
 % Reset rand, randn, randi to default seed
 rng('default')
 
+addpath KWaveOperator2D/
+
 % define path
 path = 'CoronaeNet/';
 
@@ -42,24 +44,47 @@ setting.computation.theta_max = MLangle/180*pi;
 
 %% Forward PAT via FFT: compute PAT data 
 setting.computation.interpolationMethodF = 'cubic'; % fwd: {'trig','nearest','linear','cubic'}
-data = kSpaceForwardMirrorFFT2D(p0,setting);
+data = c*kSpaceForwardMirrorFFT2D(p0,setting);
 
 
 %% Adjoint PAT via FFT:
 setting.computation.interpolationMethodA = 'cubic'; % adj: {'nearest','linear','cubic'}
-adj = kSpaceAdjointMirrorFFT2D(data,setting);
+adj = kSpaceAdjointMirrorFFT2D(1/c*data,setting); %note undoing the "c" scaling is part of the adjoint computation in (omega,kS) non-normalised frequency, normalised frequency omega would be omega/c
 
 
 %% Inverse PAT via FFT:
 setting.computation.interpolationMethodI = 'cubic'; % inv: {'nearest','linear','cubic'}
-inv = kSpaceInverseMirrorFFT2D(data,setting);
+inv = kSpaceInverseMirrorFFT2D(1/c*data,setting); %note undoing the "c" scaling is part of the inverse computation in non-normalised frequency omega
 
 
 %% display and compare
+figure
 subplot(2,2,1);imagesc(p0);axis image;colorbar;title('p0')
-subplot(2,2,2);imagesc(data');axis image;colorbar;title('data')
-subplot(2,2,3);imagesc(adj);axis image;colorbar;title('adj')
-subplot(2,2,4);imagesc(inv);axis image;colorbar;title('inv')
+subplot(2,2,2);imagesc(data');axis image;colorbar;title('FFT: data')
+subplot(2,2,3);imagesc(adj);axis image;colorbar;title('FFT: adj')
+subplot(2,2,4);imagesc(inv);axis image;colorbar;title('FFT: inv')
 
 
+
+%% Forward PAT via kWave: compute PAT data setting.computation.interpolationMethodF = 'cubic'; % fwd: {'trig','nearest','linear','cubic'}
+dataKW = kSpaceForwardKWave2D(p0,setting);
+
+
+%% Adjoint PAT via kWave:
+adjKW = kSpaceAdjointKWave2D(dataKW,setting);
+%% Mixed operator: Forward FFT data into kWave adjoint
+fwdFFTadjKW = kSpaceAdjointKWave2D(data,setting); %note we are NOT undoing the scaling if used with kWave
+
+% to be implemented
+%% Inverse PAT via kWave:
+%invKW = kSpaceInverseKWave2D(data,setting);
+
+
+%% display and compare
+figure
+subplot(2,2,1);imagesc(p0);axis image;colorbar;title('kW: p0')
+subplot(2,2,2);imagesc(dataKW');axis image;colorbar;title('kW: data')
+subplot(2,2,3);imagesc(adjKW);axis image;colorbar;title('kW: adj')
+subplot(2,2,4);imagesc(fwdFFTadjKW);axis image;colorbar;title('FFT: fwd, kW: adj')
+%subplot(2,2,4);imagesc(invKW);axis image;colorbar;title('inv')
 
