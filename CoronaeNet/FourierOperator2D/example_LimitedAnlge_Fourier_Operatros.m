@@ -77,14 +77,15 @@ fwdFFTadjKW = kSpaceAdjointKWave2D(data,setting); %note we are NOT undoing the s
 
 % to be implemented
 %% Inverse PAT via kWave:
-%invKW = kSpaceInverseKWave2D(data,setting);
-
+invKW = kSpaceInverseKWave2D(dataKW,setting);
+%% Mixed operator: Forward FFT data into kWave inverse
+fwdFFTinvKW = kSpaceInverseKWave2D(data,setting);
 
 %% display and compare
 figure
-subplot(2,2,1);imagesc(p0);axis image;colorbar;title('kW: p0')
-subplot(2,2,2);imagesc(dataKW');axis image;colorbar;title('kW: data')
-subplot(2,2,3);imagesc(adjKW);axis image;colorbar;title('kW: adj')
-subplot(2,2,4);imagesc(fwdFFTadjKW);axis image;colorbar;title('FFT: fwd, kW: adj')
-%subplot(2,2,4);imagesc(invKW);axis image;colorbar;title('inv')
-
+subplot(2,3,1);imagesc(p0);axis image;colorbar;title('kW: p0')
+subplot(2,3,2);imagesc(dataKW');axis image;colorbar;title('kW: data')
+subplot(2,3,3);imagesc(adjKW);axis image;colorbar;title('kW: adj')
+subplot(2,3,4);imagesc(fwdFFTadjKW);axis image;colorbar;title('FFT: fwd, kW: adj')
+subplot(2,3,5);imagesc(invKW);axis image;colorbar;title('KW: inv')
+subplot(2,3,6);imagesc(fwdFFTinvKW);axis image;colorbar;title('FFT: fwd, kW: inv')
