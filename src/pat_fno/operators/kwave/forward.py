@@ -8,6 +8,18 @@ from ._backend import get_setting, require_kwave
 
 
 def kwave_forward_2d(p0: np.ndarray, setting: object) -> np.ndarray:
+    """Simulate sensor-time pressure data with k-Wave.
+
+    Args:
+        p0: Initial pressure field with shape ``(Nx, Ny)``.
+        setting: Grid, medium, acquisition, and boundary settings.
+
+    Returns:
+        Sensor-time pressure data with shape ``(Ny, Nt)``.
+
+    Raises:
+        ValueError: If the image shape or boundary type is invalid.
+    """
     nx, ny = get_setting(setting, "Nx"), get_setting(setting, "Ny")
     if p0.shape != (nx, ny):
         raise ValueError("p0 size must be setting.Nx x setting.Ny.")
@@ -31,4 +43,6 @@ def kwave_forward_2d(p0: np.ndarray, setting: object) -> np.ndarray:
             options["PMLSize"] = pml_size
     else:
         raise ValueError("setting.kwaveBoundary must be 'pml' or 'periodic'.")
-    return np.asarray(dict.__getitem__(kspaceFirstOrder2D(grid, medium, source, sensor, **options), chr(112)), dtype=float).T
+    result = kspaceFirstOrder2D(grid, medium, source, sensor, **options)
+    pressure = dict.__getitem__(result, chr(112))
+    return np.asarray(pressure, dtype=float).T

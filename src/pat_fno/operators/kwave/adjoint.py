@@ -8,6 +8,18 @@ from ._backend import get_setting, require_kwave
 
 
 def kwave_adjoint_2d(data: np.ndarray, setting: object) -> np.ndarray:
+    """Apply the scaled discrete k-Wave adjoint to pressure data.
+
+    Args:
+        data: Sensor-time pressure data with shape ``(Ny, Nt)``.
+        setting: Grid, medium, acquisition, and boundary settings.
+
+    Returns:
+        Adjoint pressure field with shape ``(Nx, Ny)``.
+
+    Raises:
+        ValueError: If the data shape or boundary type is invalid.
+    """
     nx, ny, nt = (get_setting(setting, key) for key in ("Nx", "Ny", "Nt"))
     if data.shape != (ny, nt):
         raise ValueError("data must have size Ny x Nt.")
@@ -34,8 +46,10 @@ def kwave_adjoint_2d(data: np.ndarray, setting: object) -> np.ndarray:
             options["PMLSize"] = pml_size
     else:
         raise ValueError("setting.kwaveBoundary must be 'pml' or 'periodic'.")
-    result = kspaceFirstOrder2D(grid, medium, source, {"mask": mask, "record": ["p_final"]}, **options)
-    full = np.asarray(result["p_final"] if isinstance(result, dict) else result.p_final, dtype=float) / (rho * c**2)
+    sensor = {"mask": mask, "record": ["p_final"]}
+    result = kspaceFirstOrder2D(grid, medium, source, sensor, **options)
+    final_pressure = result["p_final"] if isinstance(result, dict) else result.p_final
+    full = np.asarray(final_pressure, dtype=float) / (rho * c**2)
     if full.shape == (ny, 2 * nx):
         full = full.T
     if full.shape == (ny, nx):

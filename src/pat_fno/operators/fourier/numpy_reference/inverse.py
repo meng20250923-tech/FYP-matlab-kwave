@@ -9,6 +9,15 @@ from ._utils import get_setting, kgrid, unitary_fft2, unitary_ifft2
 
 
 def numpy_inverse_2d(f: np.ndarray, setting: object) -> np.ndarray:
+    """Evaluate the NumPy reference Fourier PAT inverse.
+
+    Args:
+        f: Sensor-time pressure data with shape ``(Ny, Nt)``.
+        setting: Fourier interpolation, grid, and acquisition settings.
+
+    Returns:
+        Reconstructed pressure field with shape ``(Nx, Ny)``.
+    """
     method = get_setting(setting, "computation.interpolationMethodI")
     theta_max, c = get_setting(setting, "computation.theta_max"), get_setting(setting, "soundSpeed")
     nx, ny = get_setting(setting, "Nx"), get_setting(setting, "Ny")
@@ -26,7 +35,12 @@ def numpy_inverse_2d(f: np.ndarray, setting: object) -> np.ndarray:
     factor[(w == 0) & (data_ky == 0)] = c
     factor[np.abs(data_ky) > np.abs((w / c) * np.sin(theta_max))] = 0
     p0_kx, p0_ky = kgrid(2 * nx, dx, ny, dy)
-    recovered = griddata((kx_new.ravel(), data_ky.ravel()), (p_wky * factor).ravel(),
-                         (p0_kx, p0_ky), method=method, fill_value=0.0)
+    recovered = griddata(
+        (kx_new.ravel(), data_ky.ravel()),
+        (p_wky * factor).ravel(),
+        (p0_kx, p0_ky),
+        method=method,
+        fill_value=0.0,
+    )
     recovered *= np.sqrt(p_wky.size / recovered.size)
     return np.real(unitary_ifft2(recovered))[nx:, :]

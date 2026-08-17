@@ -9,6 +9,15 @@ from ._utils import get_setting, kgrid, unitary_fft2, unitary_ifft2
 
 
 def numpy_adjoint_2d(f: np.ndarray, setting: object) -> np.ndarray:
+    """Evaluate the NumPy reference Fourier PAT adjoint.
+
+    Args:
+        f: Sensor-time pressure data with shape ``(Ny, Nt)``.
+        setting: Fourier interpolation, grid, and acquisition settings.
+
+    Returns:
+        Adjoint pressure field with shape ``(Nx, Ny)``.
+    """
     method = get_setting(setting, "computation.interpolationMethodA")
     theta_max, c = get_setting(setting, "computation.theta_max"), get_setting(setting, "soundSpeed")
     nx, ny = get_setting(setting, "Nx"), get_setting(setting, "Ny")
@@ -24,8 +33,13 @@ def numpy_adjoint_2d(f: np.ndarray, setting: object) -> np.ndarray:
     radicand = (w / c) ** 2 - data_ky**2
     kx_new = np.sign(w) * np.sqrt(np.maximum(radicand, 0.0))
     p0_kx, p0_ky = kgrid(2 * nx, dx, ny, dy)
-    recovered = griddata((kx_new.ravel(), data_ky.ravel()), (p_wky * factor).ravel(),
-                         (p0_kx, p0_ky), method=method, fill_value=0.0)
+    recovered = griddata(
+        (kx_new.ravel(), data_ky.ravel()),
+        (p_wky * factor).ravel(),
+        (p0_kx, p0_ky),
+        method=method,
+        fill_value=0.0,
+    )
     recovered *= np.sqrt(p_wky.size / recovered.size)
     p_xy = np.real(unitary_ifft2(recovered))
     return p_xy[nx:, :]

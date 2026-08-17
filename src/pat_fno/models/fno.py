@@ -35,12 +35,8 @@ class SpectralConv2d(nn.Module):
 
         scale = 1.0 / (in_channels * out_channels)
         weight_shape = (in_channels, out_channels, modes1, modes2)
-        self.weights_pos = nn.Parameter(
-            scale * torch.randn(*weight_shape, dtype=torch.cfloat)
-        )
-        self.weights_neg = nn.Parameter(
-            scale * torch.randn(*weight_shape, dtype=torch.cfloat)
-        )
+        self.weights_pos = nn.Parameter(scale * torch.randn(*weight_shape, dtype=torch.cfloat))
+        self.weights_neg = nn.Parameter(scale * torch.randn(*weight_shape, dtype=torch.cfloat))
 
     @staticmethod
     def _mul(values: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
@@ -51,13 +47,11 @@ class SpectralConv2d(nn.Module):
         """Transform a feature field while preserving its spatial resolution."""
         if values.ndim != 4:
             raise ValueError(
-                "SpectralConv2d expects a tensor with shape "
-                "(batch, channels, height, width)."
+                "SpectralConv2d expects a tensor with shape (batch, channels, height, width)."
             )
         if values.shape[1] != self.weights_pos.shape[0]:
             raise ValueError(
-                f"Expected {self.weights_pos.shape[0]} channels, "
-                f"received {values.shape[1]}."
+                f"Expected {self.weights_pos.shape[0]} channels, received {values.shape[1]}."
             )
 
         batch, _, height, width = values.shape
@@ -75,18 +69,10 @@ class SpectralConv2d(nn.Module):
         retained_modes1 = min(self.modes1, height)
         retained_modes2 = min(self.modes2, width // 2 + 1)
 
-        positive_values = transformed[
-            :, :, :retained_modes1, :retained_modes2
-        ]
-        negative_values = transformed[
-            :, :, -retained_modes1:, :retained_modes2
-        ]
-        positive_weights = self.weights_pos[
-            :, :, :retained_modes1, :retained_modes2
-        ]
-        negative_weights = self.weights_neg[
-            :, :, :retained_modes1, :retained_modes2
-        ]
+        positive_values = transformed[:, :, :retained_modes1, :retained_modes2]
+        negative_values = transformed[:, :, -retained_modes1:, :retained_modes2]
+        positive_weights = self.weights_pos[:, :, :retained_modes1, :retained_modes2]
+        negative_weights = self.weights_neg[:, :, :retained_modes1, :retained_modes2]
 
         output[:, :, :retained_modes1, :retained_modes2] = self._mul(
             positive_values,
@@ -130,14 +116,9 @@ class TinyFNO2d(nn.Module):
 
         self.lift = nn.Conv2d(3, width, 1)
         self.spectral = nn.ModuleList(
-            [
-                SpectralConv2d(width, width, modes1, modes2)
-                for _ in range(layers)
-            ]
+            [SpectralConv2d(width, width, modes1, modes2) for _ in range(layers)]
         )
-        self.skip = nn.ModuleList(
-            [nn.Conv2d(width, width, 1) for _ in range(layers)]
-        )
+        self.skip = nn.ModuleList([nn.Conv2d(width, width, 1) for _ in range(layers)])
         self.project = nn.Sequential(
             nn.Conv2d(width, 64, 1),
             nn.GELU(),
@@ -147,14 +128,9 @@ class TinyFNO2d(nn.Module):
     def forward(self, values: torch.Tensor) -> torch.Tensor:
         """Predict a scalar output field from a scalar input field."""
         if values.ndim != 4:
-            raise ValueError(
-                "TinyFNO2d expects a tensor with shape "
-                "(batch, 1, height, width)."
-            )
+            raise ValueError("TinyFNO2d expects a tensor with shape (batch, 1, height, width).")
         if values.shape[1] != 1:
-            raise ValueError(
-                f"TinyFNO2d expects one input channel, received {values.shape[1]}."
-            )
+            raise ValueError(f"TinyFNO2d expects one input channel, received {values.shape[1]}.")
 
         batch, _, height, width = values.shape
         coordinate_y = (

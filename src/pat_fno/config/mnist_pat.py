@@ -85,9 +85,7 @@ def get_dataset_scale(name: str) -> DatasetScale:
         return DATASET_SCALES[name]
     except KeyError as error:
         choices = ", ".join(DATASET_SCALES)
-        raise ValueError(
-            f"Unknown dataset scale {name!r}; choose from {choices}."
-        ) from error
+        raise ValueError(f"Unknown dataset scale {name!r}; choose from {choices}.") from error
 
 
 # Compatibility aliases for commands written before explicit scales were added.

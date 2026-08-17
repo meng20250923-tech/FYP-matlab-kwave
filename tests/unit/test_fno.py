@@ -10,9 +10,7 @@ def test_thesis_model_parameter_count() -> None:
     """The thesis configuration should contain 100,337 parameters."""
     model = TinyFNO2d(modes1=8, modes2=8, width=16, layers=3)
 
-    parameter_count = sum(
-        parameter.numel() for parameter in model.parameters()
-    )
+    parameter_count = sum(parameter.numel() for parameter in model.parameters())
 
     assert parameter_count == 100_337
 

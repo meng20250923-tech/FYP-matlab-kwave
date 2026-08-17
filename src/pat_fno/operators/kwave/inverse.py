@@ -8,6 +8,18 @@ from ._backend import get_setting, require_kwave
 
 
 def kwave_inverse_2d(data: np.ndarray, setting: object) -> np.ndarray:
+    """Reconstruct an initial pressure field by k-Wave time reversal.
+
+    Args:
+        data: Sensor-time pressure data with shape ``(Ny, Nt)``.
+        setting: Grid, medium, acquisition, and boundary settings.
+
+    Returns:
+        Reconstructed pressure field with shape ``(Nx, Ny)``.
+
+    Raises:
+        ValueError: If the data shape or boundary type is invalid.
+    """
     nx, ny, nt = (get_setting(setting, key) for key in ("Nx", "Ny", "Nt"))
     if data.shape != (ny, nt):
         raise ValueError("data must have size Ny x Nt.")

@@ -10,6 +10,18 @@ from .interpolation import triginterp
 
 
 def numpy_forward_2d(p: np.ndarray, setting: object) -> np.ndarray:
+    """Evaluate the NumPy reference Fourier PAT forward operator.
+
+    Args:
+        p: Initial pressure field with shape ``(Nx, Ny)``.
+        setting: Fourier interpolation, grid, and acquisition settings.
+
+    Returns:
+        Sensor-time pressure data with shape ``(Ny, Nt)``.
+
+    Raises:
+        ValueError: If the requested interpolation method is unsupported.
+    """
     method = get_setting(setting, "computation.interpolationMethodF")
     theta_max = get_setting(setting, "computation.theta_max")
     c = get_setting(setting, "soundSpeed")
@@ -34,8 +46,11 @@ def numpy_forward_2d(p: np.ndarray, setting: object) -> np.ndarray:
         if method not in valid:
             raise ValueError(f"Unsupported SciPy interpolation method: {method}")
         p_wky = griddata(
-            (p0_ky.ravel(), p0_kx.ravel()), p_kxky.ravel(),
-            (data_ky, kx_new), method=method, fill_value=np.nan,
+            (p0_ky.ravel(), p0_kx.ravel()),
+            p_kxky.ravel(),
+            (data_ky, kx_new),
+            method=method,
+            fill_value=np.nan,
         )
 
     p_wky *= np.sqrt(p_kxky.size / p_wky.size)
@@ -52,5 +67,7 @@ def numpy_forward_2d(p: np.ndarray, setting: object) -> np.ndarray:
     weight[(data_ky == 0) & (w == 0)] = 1.0 / c
     ky_max = np.abs((w / c) * np.sin(theta_max))
     weight[np.abs(data_ky) > ky_max] = 0
-    frec = np.real(np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(weight * p_wky))) * np.sqrt(p_wky.size))
+    weighted_spectrum = np.fft.ifftshift(weight * p_wky)
+    reconstruction = np.fft.ifftn(weighted_spectrum)
+    frec = np.real(np.fft.fftshift(reconstruction) * np.sqrt(p_wky.size))
     return (np.sqrt(2.0) * frec[frec.shape[0] // 2 :, :]).T

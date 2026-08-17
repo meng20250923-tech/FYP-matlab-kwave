@@ -14,15 +14,9 @@ from pat_fno.operators.kwave import (
     kwave_inverse_2d,
 )
 
-forward_module = importlib.import_module(
-    "pat_fno.operators.kwave.forward"
-)
-inverse_module = importlib.import_module(
-    "pat_fno.operators.kwave.inverse"
-)
-adjoint_module = importlib.import_module(
-    "pat_fno.operators.kwave.adjoint"
-)
+forward_module = importlib.import_module("pat_fno.operators.kwave.forward")
+inverse_module = importlib.import_module("pat_fno.operators.kwave.inverse")
+adjoint_module = importlib.import_module("pat_fno.operators.kwave.adjoint")
 
 CALLS: list[dict[str, Any]] = []
 
@@ -63,9 +57,7 @@ def fake_solver(
             "grid": grid,
             "medium": medium,
             "source": {
-                key: np.array(value, copy=True)
-                if isinstance(value, np.ndarray)
-                else value
+                key: np.array(value, copy=True) if isinstance(value, np.ndarray) else value
                 for key, value in source.items()
             },
             "sensor": sensor,
@@ -156,10 +148,7 @@ def test_adjoint_applies_first_order_source_scaling() -> None:
     expected[:, -2] += expected[:, -1]
     expected = expected[:, :-1]
     expected *= (
-        setting["mediumDensity"]
-        * setting["soundSpeed"]
-        * setting["dx"]
-        / (4 * setting["dt"])
+        setting["mediumDensity"] * setting["soundSpeed"] * setting["dx"] / (4 * setting["dt"])
     )
 
     np.testing.assert_array_equal(source, expected)
