@@ -247,3 +247,88 @@ def test_iterated_time_reversal_rejects_non_positive_step() -> None:
             "periodic_theta89",
             gradient_descent=False,
         )
+
+
+def test_iterative_method_configuration_preserves_result_naming() -> None:
+    """Iterative method configuration retains the established output suffixes."""
+    arguments = Namespace(step_size=1.5)
+
+    assert reconstruction._iterative_method_configuration(arguments, True) == (
+        "gradient_descent",
+        "",
+    )
+    assert reconstruction._iterative_method_configuration(arguments, False) == (
+        "iterated_time_reversal",
+        "_step1.5",
+    )
+
+
+@pytest.mark.parametrize("gradient_descent", [False, True])
+def test_iterative_sample_retains_update_order(
+    monkeypatch: pytest.MonkeyPatch,
+    gradient_descent: bool,
+) -> None:
+    """The extracted sample loop follows the established reconstruction updates."""
+    monkeypatch.setattr(reconstruction, "kwave_forward_2d", lambda image, setting: image)
+    monkeypatch.setattr(reconstruction, "kwave_adjoint_2d", lambda residual, setting: residual)
+    monkeypatch.setattr(reconstruction, "kwave_inverse_2d", lambda residual, setting: residual)
+    monkeypatch.setattr(reconstruction, "estimate_lipschitz", lambda mask, setting, count: 2.0)
+    target = np.ones((2, 2), dtype=np.float64)
+    observed = np.ones_like(target)
+    mask = np.ones_like(target)
+
+    image, residuals, errors, lipschitz, effective_step = reconstruction._run_iterative_sample(
+        target=target,
+        observed=observed,
+        mask=mask,
+        setting=object(),
+        iterations=2,
+        gradient_descent=gradient_descent,
+        step_size=0.25,
+        power_iterations=4,
+        progress_prefix="test",
+    )
+
+    expected = np.full((2, 2), 0.4375 if not gradient_descent else 0.75)
+    np.testing.assert_array_equal(image, expected)
+    np.testing.assert_allclose(
+        residuals,
+        [1.0, 0.75 if not gradient_descent else 0.5, 0.5625 if not gradient_descent else 0.25],
+    )
+    np.testing.assert_allclose(errors, residuals)
+    if gradient_descent:
+        assert lipschitz == 2.0
+        assert effective_step == 0.5
+    else:
+        assert lipschitz is None
+        assert effective_step is None
+
+
+def test_learned_sample_optimisation_is_deterministic() -> None:
+    """The extracted learned loop retains Adam updates and image projection."""
+    truth = torch.ones((2, 2), dtype=torch.float32)
+    observation = torch.full((2, 2), 0.6, dtype=torch.float32)
+    mask = torch.ones_like(observation)
+    setting = SimpleNamespace(Ny=2, Nt=2)
+    normalization = {
+        "p0_mean": 0.0,
+        "p0_std": 1.0,
+        "data_mean": 0.0,
+        "data_std": 1.0,
+    }
+
+    image, history = reconstruction._optimise_learned_sample(
+        model=IdentityModel(),
+        scenario="fno_only",
+        observation=observation,
+        mask=mask,
+        truth=truth,
+        setting=setting,
+        normalization=normalization,
+        iterations=2,
+        learning_rate=0.1,
+    )
+
+    np.testing.assert_allclose(history, [1.0, 0.9, 0.8008828], rtol=1e-6)
+    np.testing.assert_allclose(image.numpy(), np.full((2, 2), 0.1991172), rtol=1e-6)
+    assert not image.requires_grad

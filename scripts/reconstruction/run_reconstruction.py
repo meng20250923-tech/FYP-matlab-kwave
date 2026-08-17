@@ -242,11 +242,63 @@ def estimate_lipschitz(mask: np.ndarray, setting: object, iterations: int) -> fl
     return value
 
 
-def run_iterative(args: argparse.Namespace, condition: str, *, gradient_descent: bool) -> None:
+def _iterative_method_configuration(
+    args: argparse.Namespace,
+    gradient_descent: bool,
+) -> tuple[str, str]:
+    """Return the output directory and filename suffix for an iterative method."""
     if not gradient_descent and args.step_size <= 0:
         raise ValueError("--step-size must be positive.")
     directory = "gradient_descent" if gradient_descent else "iterated_time_reversal"
     suffix = "" if gradient_descent else f"_step{args.step_size:g}"
+    return directory, suffix
+
+
+def _run_iterative_sample(
+    *,
+    target: np.ndarray,
+    observed: np.ndarray,
+    mask: np.ndarray,
+    setting: object,
+    iterations: int,
+    gradient_descent: bool,
+    step_size: float,
+    power_iterations: int,
+    progress_prefix: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float | None, float | None]:
+    """Reconstruct one image and return its complete iteration history."""
+    image = np.zeros_like(target, dtype=np.float64)
+    lipschitz = None
+    effective_step = None
+    if gradient_descent:
+        lipschitz = estimate_lipschitz(mask, setting, power_iterations)
+        effective_step = 1.0 / lipschitz
+
+    residual_history = np.empty(iterations + 1, dtype=np.float64)
+    error_history = np.empty_like(residual_history)
+    observed_norm = max(np.linalg.norm(mask * observed), np.finfo(float).eps)
+    for iteration in range(iterations + 1):
+        residual = mask * (kwave_forward_2d(image, setting) - observed)
+        residual_history[iteration] = np.linalg.norm(residual) / observed_norm
+        error_history[iteration] = rel_l2(image, target)
+        print(
+            f"{progress_prefix}, iteration {iteration:02d}/{iterations}, "
+            f"residual={residual_history[iteration]:.4e}, "
+            f"rel-L2={error_history[iteration]:.4f}",
+            flush=True,
+        )
+        if iteration == iterations:
+            break
+        if gradient_descent:
+            image -= effective_step * kwave_adjoint_2d(residual, setting)
+        else:
+            image -= step_size * kwave_inverse_2d(residual, setting)
+
+    return image, residual_history, error_history, lipschitz, effective_step
+
+
+def run_iterative(args: argparse.Namespace, condition: str, *, gradient_descent: bool) -> None:
+    directory, suffix = _iterative_method_configuration(args, gradient_descent)
     output = ROOT / "results" / "reconstruction" / args.dataset / directory
     output.mkdir(parents=True, exist_ok=True)
     tag, result_path, metrics_path = _paths(args, condition, output, suffix)
@@ -264,31 +316,26 @@ def run_iterative(args: argparse.Namespace, condition: str, *, gradient_descent:
     lipschitz = np.empty(count, dtype=np.float64) if gradient_descent else None
     step_sizes = np.empty(count, dtype=np.float64) if gradient_descent else None
     for sample in range(count):
-        image = np.zeros_like(target[sample], dtype=np.float64)
         if gradient_descent:
             print(f"{condition}: estimating L for sample {sample + 1}/{count}", flush=True)
-            lipschitz[sample] = estimate_lipschitz(masks[sample], setting, args.power_iterations)
-            step_sizes[sample] = 1.0 / lipschitz[sample]
-        for iteration in range(args.iterations + 1):
-            residual = masks[sample] * (kwave_forward_2d(image, setting) - observed[sample])
-            residual_history[sample, iteration] = np.linalg.norm(residual) / max(
-                np.linalg.norm(masks[sample] * observed[sample]), np.finfo(float).eps
-            )
-            error_history[sample, iteration] = rel_l2(image, target[sample])
-            print(
-                f"{condition}: sample {sample + 1}/{count}, "
-                f"iteration {iteration:02d}/{args.iterations}, "
-                f"residual={residual_history[sample, iteration]:.4e}, "
-                f"rel-L2={error_history[sample, iteration]:.4f}",
-                flush=True,
-            )
-            if iteration == args.iterations:
-                break
-            if gradient_descent:
-                image -= step_sizes[sample] * kwave_adjoint_2d(residual, setting)
-            else:
-                image -= args.step_size * kwave_inverse_2d(residual, setting)
+        prefix = f"{condition}: sample {sample + 1}/{count}"
+        image, residuals, errors, estimated_lipschitz, effective_step = _run_iterative_sample(
+            target=target[sample],
+            observed=observed[sample],
+            mask=masks[sample],
+            setting=setting,
+            iterations=args.iterations,
+            gradient_descent=gradient_descent,
+            step_size=args.step_size,
+            power_iterations=args.power_iterations,
+            progress_prefix=prefix,
+        )
         reconstruction_all[sample] = image.astype(np.float32)
+        residual_history[sample] = residuals
+        error_history[sample] = errors
+        if gradient_descent:
+            lipschitz[sample] = estimated_lipschitz
+            step_sizes[sample] = effective_step
     payload = {
         "reconstruction": reconstruction_all,
         "p0": target,
@@ -373,6 +420,41 @@ def _learned_prediction(model, scenario, image, setting, normalization):
     )
 
 
+def _optimise_learned_sample(
+    *,
+    model,
+    scenario: str,
+    observation,
+    mask,
+    truth,
+    setting: object,
+    normalization: dict[str, float],
+    iterations: int,
+    learning_rate: float,
+):
+    """Optimise one image with a frozen learned forward operator."""
+    import torch
+
+    image = torch.zeros_like(truth, requires_grad=True)
+    optimiser = torch.optim.Adam([image], lr=learning_rate)
+    history = np.empty(iterations + 1, dtype=np.float64)
+    for iteration in range(iterations + 1):
+        estimate = _learned_prediction(model, scenario, image, setting, normalization)
+        history[iteration] = float(
+            torch.linalg.vector_norm(image.detach() - truth)
+            / torch.clamp(torch.linalg.vector_norm(truth), min=torch.finfo(truth.dtype).eps)
+        )
+        if iteration == iterations:
+            break
+        loss = torch.mean((mask * (estimate - observation)) ** 2)
+        optimiser.zero_grad(set_to_none=True)
+        loss.backward()
+        optimiser.step()
+        with torch.no_grad():
+            image.clamp_(0.0, 1.0)
+    return image.detach(), history
+
+
 def run_learned(args: argparse.Namespace, condition: str) -> None:
     import torch
 
@@ -415,23 +497,19 @@ def run_learned(args: argparse.Namespace, condition: str) -> None:
         )
         mask = torch.as_tensor(arrays["mask"][index], dtype=torch.float32, device=device)
         truth = torch.as_tensor(arrays["p0"][index], dtype=torch.float32, device=device)
-        image = torch.zeros_like(truth, requires_grad=True)
-        optimiser = torch.optim.Adam([image], lr=args.learning_rate)
-        for iteration in range(args.iterations + 1):
-            estimate = _learned_prediction(model, args.scenario, image, setting, normalization)
-            histories[index, iteration] = float(
-                torch.linalg.vector_norm(image.detach() - truth)
-                / torch.clamp(torch.linalg.vector_norm(truth), min=torch.finfo(truth.dtype).eps)
-            )
-            if iteration == args.iterations:
-                break
-            loss = torch.mean((mask * (estimate - observation)) ** 2)
-            optimiser.zero_grad(set_to_none=True)
-            loss.backward()
-            optimiser.step()
-            with torch.no_grad():
-                image.clamp_(0.0, 1.0)
-        reconstruction[index] = image.detach().cpu().numpy()
+        image, history = _optimise_learned_sample(
+            model=model,
+            scenario=args.scenario,
+            observation=observation,
+            mask=mask,
+            truth=truth,
+            setting=setting,
+            normalization=normalization,
+            iterations=args.iterations,
+            learning_rate=args.learning_rate,
+        )
+        histories[index] = history
+        reconstruction[index] = image.cpu().numpy()
         print(
             f"{condition}/{args.scenario}: {index + 1}/{count}, rel-L2={histories[index, -1]:.4f}",
             flush=True,
