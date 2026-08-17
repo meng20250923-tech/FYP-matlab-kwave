@@ -1,0 +1,17 @@
+name: pat_fno
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10.20
+  - pip
+  - pip:
+      - numpy==2.2.6
+      - scipy==1.15.3
+      - h5py==3.15.1
+      - matplotlib==3.10.7
+      - torch==2.11.0
+      - torchvision==0.26.0
+      - k-wave-python==0.5.0rc1

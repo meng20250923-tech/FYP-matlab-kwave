@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pat-fno"
+version = "0.1.0"
+description = "Fourier-guided neural-operator surrogates for photoacoustic tomography"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+authors = [
+    {name = "Mengjie Mao"}
+]
+dependencies = [
+    "numpy>=2.2,<2.3",
+    "scipy",
+    "h5py",
+    "matplotlib",
+    "torch>=2.8,<2.12",
+    "torchvision>=0.23,<0.27",
+    "k-wave-python==0.5.0rc1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "ruff>=0.6",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+]
+filterwarnings = [
+    "error",
+]
+
+[tool.coverage.run]
+source = ["pat_fno"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = [
+    "results",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "B",
+    "UP",
+    "D",
+]
+ignore = [
+    "D203",
+    "D213",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D"]
+"scripts/*.py" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

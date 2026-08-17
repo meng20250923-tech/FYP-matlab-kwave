@@ -1,0 +1,75 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# IDE and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build and packaging outputs
+build/
+dist/
+*.egg-info/
+
+# Large datasets and generated arrays
+data/
+datasets/
+checkpoints/
+*.h5
+*.hdf5
+*.pt
+*.pth
+*.ckpt
+*.npy
+*.npz
+
+# Retain the deliberately small example input
+!examples/sample_data/*.npz
+
+# Experiment logs and process records
+*.log
+*.pid
+nohup.out
+wandb/
+runs/
+tmp/
+temp/
+
+# Large prediction and reconstruction outputs
+test_predictions.npz
+predictions/
+reconstructions/
+
+# LaTeX auxiliary files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.lot
+*.out
+*.synctex.gz
+*.toc
+
+# Results are opt-in: retain only curated tables, figures and their README
+results/*
+!results/README.md
+!results/tables/
+!results/tables/**
+!results/figures/
+!results/figures/**
