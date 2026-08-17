@@ -25,6 +25,7 @@ MODELS = (
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line options for forward-model evaluation."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scale", choices=("medium", "large"), default="medium")
     parser.add_argument("--dataset")
@@ -39,10 +40,41 @@ def parse_args() -> argparse.Namespace:
 
 
 def _read_json(path: Path) -> dict | None:
+    """Read a JSON object when its file exists."""
     return json.loads(path.read_text()) if path.exists() else None
 
 
+def _plot_fourier_baseline(arrays: dict, metrics: dict, output_path: Path) -> None:
+    """Plot one analytical Fourier baseline against its k-Wave target."""
+    sensor = arrays["data_fft"].shape[1] // 2
+    figure, axes = plt.subplots(2, 3, figsize=(13, 7), constrained_layout=True)
+    for axis, value, title in zip(
+        axes[0],
+        (arrays["p0"][0], arrays["data_fft"][0], arrays["kwave_forward"][0]),
+        ("MNIST p0", "c x Fourier", "k-Wave target"),
+        strict=False,
+    ):
+        axis.imshow(value, aspect="auto")
+        axis.set_title(title)
+    axes[1, 0].imshow(arrays["kwave_forward"][0] - arrays["data_fft"][0], aspect="auto")
+    axes[1, 0].set_title("k-Wave - c x Fourier")
+    axes[1, 1].plot(arrays["data_fft"][0, sensor], label="c x Fourier")
+    axes[1, 1].plot(arrays["kwave_forward"][0, sensor], label="k-Wave")
+    axes[1, 1].legend()
+    axes[1, 1].set_title("Middle sensor trace")
+    axes[1, 2].axis("off")
+    axes[1, 2].text(
+        0.05,
+        0.8,
+        "\n".join(f"{key}: {value:.4g}" for key, value in metrics.items()),
+        fontsize=12,
+    )
+    figure.savefig(output_path, dpi=180)
+    plt.close(figure)
+
+
 def _evaluate_fourier(dataset: str, scale: str, selected: str, split: str) -> dict:
+    """Evaluate and plot the analytical baseline for selected conditions."""
     dataset_root = ROOT / "datasets" / dataset
     baseline_root = ROOT / "results" / f"mnist_{scale}" / "baselines"
     baseline_root.mkdir(parents=True, exist_ok=True)
@@ -51,31 +83,11 @@ def _evaluate_fourier(dataset: str, scale: str, selected: str, split: str) -> di
         arrays = load_arrays(dataset_root, condition, split)
         metrics = batch_metrics(arrays["data_fft"], arrays["kwave_forward"])
         summary[condition] = metrics
-        sensor = arrays["data_fft"].shape[1] // 2
-        figure, axes = plt.subplots(2, 3, figsize=(13, 7), constrained_layout=True)
-        for axis, value, title in zip(
-            axes[0],
-            (arrays["p0"][0], arrays["data_fft"][0], arrays["kwave_forward"][0]),
-            ("MNIST p0", "c x Fourier", "k-Wave target"),
-            strict=False,
-        ):
-            axis.imshow(value, aspect="auto")
-            axis.set_title(title)
-        axes[1, 0].imshow(arrays["kwave_forward"][0] - arrays["data_fft"][0], aspect="auto")
-        axes[1, 0].set_title("k-Wave - c x Fourier")
-        axes[1, 1].plot(arrays["data_fft"][0, sensor], label="c x Fourier")
-        axes[1, 1].plot(arrays["kwave_forward"][0, sensor], label="k-Wave")
-        axes[1, 1].legend()
-        axes[1, 1].set_title("Middle sensor trace")
-        axes[1, 2].axis("off")
-        axes[1, 2].text(
-            0.05,
-            0.8,
-            "\n".join(f"{key}: {value:.4g}" for key, value in metrics.items()),
-            fontsize=12,
+        _plot_fourier_baseline(
+            arrays,
+            metrics,
+            baseline_root / f"baseline_{condition}_{split}.png",
         )
-        figure.savefig(baseline_root / f"baseline_{condition}_{split}.png", dpi=180)
-        plt.close(figure)
         print(
             f"{condition}: relL2={metrics['rel_l2_mean']:.4f}, "
             f"corr={metrics['centered_corr_mean']:.4f}"
@@ -84,20 +96,24 @@ def _evaluate_fourier(dataset: str, scale: str, selected: str, split: str) -> di
     return summary
 
 
-def main() -> None:
-    args = parse_args()
-    dataset = args.dataset or f"mnist_{args.scale}_v1"
+def load_baseline(args: argparse.Namespace, dataset: str) -> dict:
+    """Load an existing baseline or evaluate it from the selected dataset."""
     baseline_root = ROOT / "results" / f"mnist_{args.scale}" / "baselines"
     baseline_path = baseline_root / f"baseline_metrics_{args.split}.json"
-    baseline = (
+    return (
         _read_json(baseline_path) or {}
         if args.metrics_only
         else _evaluate_fourier(dataset, args.scale, args.condition, args.split)
     )
 
+
+def collect_comparison_rows(
+    args: argparse.Namespace,
+    dataset: str,
+    baseline: dict,
+) -> list[dict]:
+    """Collect baseline and completed learned-model metrics in stable order."""
     model_root = ROOT / "results" / "mnist_medium" / dataset
-    output = ROOT / "results" / f"mnist_{args.scale}" / dataset
-    output.mkdir(parents=True, exist_ok=True)
     rows = []
     for condition in conditions(args.condition):
         if condition in baseline:
@@ -108,22 +124,32 @@ def main() -> None:
             result = _read_json(model_root / condition / key / "metrics.json")
             if result:
                 rows.append({"condition": condition, "model": label, **result[args.split]})
+    return rows
 
+
+def save_comparison(
+    output: Path,
+    dataset: str,
+    scale: str,
+    split: str,
+    rows: list[dict],
+) -> None:
+    """Write the combined comparison metrics in their stable field order."""
     save_json(
         output / "comparison.json",
         {
             "dataset": dataset,
-            "scale": args.scale,
-            "split": args.split,
+            "scale": scale,
+            "split": split,
             "rows": rows,
         },
     )
-    if not rows:
-        print("No completed metrics found.")
-        return
 
+
+def plot_comparison(rows: list[dict], selected: str, output_path: Path) -> None:
+    """Plot relative error and correlation for each acquisition condition."""
     figure, axes = plt.subplots(1, 2, figsize=(12, 4.8), constrained_layout=True)
-    for condition in conditions(args.condition):
+    for condition in conditions(selected):
         group = [row for row in rows if row["condition"] == condition]
         x = list(range(len(group)))
         labels = [row["model"] for row in group]
@@ -136,8 +162,23 @@ def main() -> None:
     axes[1].set_ylabel("mean centered correlation")
     axes[0].legend()
     axes[1].legend()
-    figure.savefig(output / "comparison.png", dpi=180)
+    figure.savefig(output_path, dpi=180)
     plt.close(figure)
+
+
+def main() -> None:
+    """Evaluate available forward operators and write their comparison."""
+    args = parse_args()
+    dataset = args.dataset or f"mnist_{args.scale}_v1"
+    baseline = load_baseline(args, dataset)
+    output = ROOT / "results" / f"mnist_{args.scale}" / dataset
+    output.mkdir(parents=True, exist_ok=True)
+    rows = collect_comparison_rows(args, dataset, baseline)
+    save_comparison(output, dataset, args.scale, args.split, rows)
+    if not rows:
+        print("No completed metrics found.")
+        return
+    plot_comparison(rows, args.condition, output / "comparison.png")
     print(f"Saved forward comparison in {output}")
 
 
