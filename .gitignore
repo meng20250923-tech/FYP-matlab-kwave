@@ -26,7 +26,7 @@ dist/
 *.egg-info/
 
 # Large datasets and generated arrays
-data/
+/data/
 datasets/
 checkpoints/
 *.h5
