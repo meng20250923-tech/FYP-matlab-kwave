@@ -11,14 +11,15 @@ import json
 import logging
 import multiprocessing as mp
 import os
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 
+from pat_fno.config.mnist_pat import SHARD_SIZE, SPLITS
 from pat_fno.data.mnist import (
     CONDITIONS,
     ROOT,
-    SHARD_SIZE,
-    SPLITS,
     build_setting,
     conditions,
     generate_sample,
@@ -62,6 +63,7 @@ def _worker(image: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.n
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line options for deterministic dataset generation."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scale", choices=tuple(SCALE_CONFIGS), required=True)
     parser.add_argument("--dataset", help="Override the default dataset directory name.")
@@ -73,13 +75,145 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _dataset_root(scale: str, dataset: str):
+def _dataset_root(scale: str, dataset: str) -> Path:
+    """Return the output directory for one dataset scale."""
     if scale == "smoke":
         return ROOT / "results" / "mnist_smoke" / "dataset"
     return ROOT / "datasets" / dataset
 
 
+def initialise_manifest(
+    root: Path,
+    dataset: str,
+    scale: str,
+    limits: dict[str, int],
+) -> tuple[Path, dict[str, Any]]:
+    """Load an existing manifest and update its invariant dataset metadata."""
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    manifest.update(
+        {
+            "dataset": dataset,
+            "scale": scale,
+            "limits": limits,
+            "grid": 64,
+            "cfl": 1.0,
+            "generator": "parallel",
+        }
+    )
+    manifest.setdefault("conditions", {})
+    return manifest_path, manifest
+
+
+def shard_metadata(condition: str, split: str, setting: Any) -> dict[str, Any]:
+    """Build the physical metadata stored with one completed shard."""
+    return {
+        "condition": condition,
+        "split": split,
+        "theta_deg": float(np.rad2deg(setting.computation.theta_max)),
+        "boundary": setting.kwaveBoundary,
+        "Nt": setting.Nt,
+        "dt": setting.dt,
+        "sound_speed": setting.soundSpeed,
+    }
+
+
+def generate_split_shards(
+    pool: Any,
+    output: Path,
+    condition: str,
+    split: str,
+    split_arrays: tuple[np.ndarray, np.ndarray, np.ndarray],
+    shard_size: int,
+    workers: int,
+    setting: Any,
+) -> None:
+    """Generate all ordered shards for one condition and dataset split."""
+    images, labels, indices = split_arrays
+    for start in range(0, len(images), shard_size):
+        stop = min(start + shard_size, len(images))
+        path = output / f"{split}_{start:05d}_{stop:05d}.h5"
+        if path.exists():
+            print(f"skip completed shard {condition}/{path.name}", flush=True)
+            continue
+        print(
+            f"{condition} {split}: samples {start}:{stop} with {workers} workers",
+            flush=True,
+        )
+        result = list(pool.imap(_worker, images[start:stop], chunksize=1))
+        p0, fourier_raw, data_fft, data_kwave = (
+            np.stack(values).astype(np.float32, copy=False) for values in zip(*result, strict=False)
+        )
+        write_shard(
+            path,
+            p0,
+            fourier_raw,
+            data_fft,
+            data_kwave,
+            labels[start:stop],
+            indices[start:stop],
+            shard_metadata(condition, split, setting),
+        )
+        print(f"saved {path}", flush=True)
+
+
+def generate_condition(
+    context: Any,
+    args: argparse.Namespace,
+    root: Path,
+    raw_splits: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]],
+    chosen_splits: tuple[str, ...],
+    shard_size: int,
+    condition: str,
+    manifest: dict[str, Any],
+    manifest_path: Path,
+) -> None:
+    """Generate every requested split for one acquisition condition."""
+    setting = build_setting(condition)
+    output = root / condition
+    output.mkdir(parents=True, exist_ok=True)
+    with context.Pool(
+        args.workers,
+        initializer=_worker_init,
+        initargs=(condition,),
+        maxtasksperchild=args.maxtasksperchild,
+    ) as pool:
+        for split in chosen_splits:
+            generate_split_shards(
+                pool,
+                output,
+                condition,
+                split,
+                raw_splits[split],
+                shard_size,
+                args.workers,
+                setting,
+            )
+
+    manifest["conditions"][condition] = {
+        "boundary": setting.kwaveBoundary,
+        "theta_deg": float(np.rad2deg(setting.computation.theta_max)),
+        "Nt": setting.Nt,
+        "dt": setting.dt,
+        "complete": args.split == "all",
+    }
+    save_json(manifest_path, manifest)
+
+
+def finalise_manifest(
+    manifest: dict[str, Any], manifest_path: Path, all_splits_requested: bool
+) -> None:
+    """Record whether every condition and split has completed."""
+    manifest["complete"] = (
+        all_splits_requested
+        and set(manifest["conditions"]) == set(CONDITIONS)
+        and all(spec.get("complete", False) for spec in manifest["conditions"].values())
+    )
+    save_json(manifest_path, manifest)
+
+
 def main() -> None:
+    """Generate the requested MNIST PAT dataset shards."""
     args = parse_args()
     config = SCALE_CONFIGS[args.scale]
     dataset = args.dataset or config["dataset"]
@@ -89,83 +223,22 @@ def main() -> None:
     raw_splits = load_mnist_splits(ROOT / "data" / "raw_mnist", limits)
     chosen_splits = tuple(limits) if args.split == "all" else (args.split,)
     context = mp.get_context("spawn")
-
-    manifest_path = root / "manifest.json"
-    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
-    manifest.update(
-        {
-            "dataset": dataset,
-            "scale": args.scale,
-            "limits": limits,
-            "grid": 64,
-            "cfl": 1.0,
-            "generator": "parallel",
-        }
-    )
-    manifest.setdefault("conditions", {})
+    manifest_path, manifest = initialise_manifest(root, dataset, args.scale, limits)
 
     for condition in conditions(args.condition):
-        setting = build_setting(condition)
-        output = root / condition
-        output.mkdir(parents=True, exist_ok=True)
-        with context.Pool(
-            args.workers,
-            initializer=_worker_init,
-            initargs=(condition,),
-            maxtasksperchild=args.maxtasksperchild,
-        ) as pool:
-            for split in chosen_splits:
-                images, labels, indices = raw_splits[split]
-                for start in range(0, len(images), shard_size):
-                    stop = min(start + shard_size, len(images))
-                    path = output / f"{split}_{start:05d}_{stop:05d}.h5"
-                    if path.exists():
-                        print(f"skip completed shard {condition}/{path.name}", flush=True)
-                        continue
-                    print(
-                        f"{condition} {split}: samples {start}:{stop} with {args.workers} workers",
-                        flush=True,
-                    )
-                    result = list(pool.imap(_worker, images[start:stop], chunksize=1))
-                    p0, fourier_raw, data_fft, data_kwave = (
-                        np.stack(values).astype(np.float32, copy=False)
-                        for values in zip(*result, strict=False)
-                    )
-                    write_shard(
-                        path,
-                        p0,
-                        fourier_raw,
-                        data_fft,
-                        data_kwave,
-                        labels[start:stop],
-                        indices[start:stop],
-                        {
-                            "condition": condition,
-                            "split": split,
-                            "theta_deg": float(np.rad2deg(setting.computation.theta_max)),
-                            "boundary": setting.kwaveBoundary,
-                            "Nt": setting.Nt,
-                            "dt": setting.dt,
-                            "sound_speed": setting.soundSpeed,
-                        },
-                    )
-                    print(f"saved {path}", flush=True)
+        generate_condition(
+            context,
+            args,
+            root,
+            raw_splits,
+            chosen_splits,
+            shard_size,
+            condition,
+            manifest,
+            manifest_path,
+        )
 
-        manifest["conditions"][condition] = {
-            "boundary": setting.kwaveBoundary,
-            "theta_deg": float(np.rad2deg(setting.computation.theta_max)),
-            "Nt": setting.Nt,
-            "dt": setting.dt,
-            "complete": args.split == "all",
-        }
-        save_json(manifest_path, manifest)
-
-    manifest["complete"] = (
-        args.split == "all"
-        and set(manifest["conditions"]) == set(CONDITIONS)
-        and all(spec.get("complete", False) for spec in manifest["conditions"].values())
-    )
-    save_json(manifest_path, manifest)
+    finalise_manifest(manifest, manifest_path, args.split == "all")
     print(f"Dataset manifest: {manifest_path}")
 
 
