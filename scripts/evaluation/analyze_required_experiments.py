@@ -30,6 +30,7 @@ LEARNED = (
 
 
 def write_csv(path: Path, rows: list[dict]) -> None:
+    """Write dictionaries to CSV while retaining first-seen column order."""
     if not rows:
         return
     keys = []
@@ -42,6 +43,7 @@ def write_csv(path: Path, rows: list[dict]) -> None:
 
 
 def bootstrap_ci(values: np.ndarray, rng: np.random.Generator, draws: int) -> tuple[float, float]:
+    """Estimate a percentile confidence interval for the sample mean."""
     values = np.asarray(values, dtype=float)
     values = values[np.isfinite(values)]
     if not len(values):
@@ -54,10 +56,8 @@ def bootstrap_ci(values: np.ndarray, rng: np.random.Generator, draws: int) -> tu
     return tuple(float(value) for value in np.quantile(means, [0.025, 0.975]))
 
 
-def sample_efficiency(args: argparse.Namespace) -> None:
-    source = ROOT / "results" / "sample_efficiency" / args.dataset
-    output = ROOT / "results" / "evaluation" / args.dataset / "required_experiments"
-    output.mkdir(parents=True, exist_ok=True)
+def collect_sample_efficiency_rows(source: Path) -> list[dict]:
+    """Collect metrics from every completed sample-efficiency run."""
     rows = []
     for condition in CONDITIONS:
         for key, label in LEARNED:
@@ -84,8 +84,11 @@ def sample_efficiency(args: argparse.Namespace) -> None:
     if not rows:
         raise FileNotFoundError(f"No completed sample-efficiency runs under {source}")
     rows.sort(key=lambda row: (row["condition"], row["model"], row["train_samples"], row["seed"]))
-    write_csv(output / "sample_efficiency_runs.csv", rows)
+    return rows
 
+
+def aggregate_sample_efficiency(rows: list[dict]) -> list[dict]:
+    """Aggregate forward errors across independent training seeds."""
     aggregate = []
     for condition in CONDITIONS:
         for _, label in LEARNED:
@@ -117,8 +120,11 @@ def sample_efficiency(args: argparse.Namespace) -> None:
                         else float("nan"),
                     }
                 )
-    write_csv(output / "sample_efficiency_summary.csv", aggregate)
+    return aggregate
 
+
+def plot_sample_efficiency(aggregate: list[dict], output: Path) -> None:
+    """Plot sample-efficiency curves from the aggregated rows."""
     figure, axes = plt.subplots(
         1, len(CONDITIONS), figsize=(11, 4.2), sharey=True, constrained_layout=True
     )
@@ -141,10 +147,23 @@ def sample_efficiency(args: argparse.Namespace) -> None:
         axis.legend(fontsize=8)
     figure.savefig(output / "sample_efficiency.png", dpi=200)
     plt.close(figure)
+
+
+def sample_efficiency(args: argparse.Namespace) -> None:
+    """Summarise completed sample-efficiency runs and draw learning curves."""
+    source = ROOT / "results" / "sample_efficiency" / args.dataset
+    output = ROOT / "results" / "evaluation" / args.dataset / "required_experiments"
+    output.mkdir(parents=True, exist_ok=True)
+    run_rows = collect_sample_efficiency_rows(source)
+    write_csv(output / "sample_efficiency_runs.csv", run_rows)
+    aggregate = aggregate_sample_efficiency(run_rows)
+    write_csv(output / "sample_efficiency_summary.csv", aggregate)
+    plot_sample_efficiency(aggregate, output)
     print(f"Saved sample-efficiency analysis in {output}")
 
 
 def per_sample_metrics(path: Path) -> dict[str, np.ndarray]:
+    """Compute reconstruction metrics independently for every saved sample."""
     data = np.load(path)
     prediction, target = data["reconstruction"], data["p0"]
     relative = np.asarray([rel_l2(a, b) for a, b in zip(prediction, target, strict=False)])
@@ -156,6 +175,7 @@ def per_sample_metrics(path: Path) -> dict[str, np.ndarray]:
 
 
 def fit_curve(values: np.ndarray) -> dict[str, float]:
+    """Fit descriptive semilog and log--log regressions to an error history."""
     y = np.asarray(values, dtype=float)[1:]
     x = np.arange(1, len(values), dtype=float)
     valid = np.isfinite(y) & (y > 0)
@@ -184,6 +204,7 @@ def fit_curve(values: np.ndarray) -> dict[str, float]:
 
 
 def method_paths(root: Path, condition: str, tag: str, itr_step: str) -> dict[str, Path]:
+    """Return reconstruction result paths for all evaluated methods."""
     return {
         "Fourier inverse": root / "fourier" / f"{tag}.npz",
         "Time reversal": root / "time_reversal" / f"{tag}.npz",
@@ -195,12 +216,34 @@ def method_paths(root: Path, condition: str, tag: str, itr_step: str) -> dict[st
     }
 
 
-def reconstruction(args: argparse.Namespace) -> None:
-    root = ROOT / "results" / "reconstruction" / args.dataset
-    output = ROOT / "results" / "evaluation" / args.dataset / "required_experiments"
-    output.mkdir(parents=True, exist_ok=True)
-    rng = np.random.default_rng(args.bootstrap_seed)
-    rows, fits, lipschitz = [], [], []
+def retention_specific_itr_steps(args: argparse.Namespace) -> dict[str, list[str]] | None:
+    """Validate and return optional retention-specific ITR step lists."""
+    if args.periodic_itr_steps is None and args.pml_itr_steps is None:
+        return None
+    if args.periodic_itr_steps is None or args.pml_itr_steps is None:
+        raise ValueError("Provide both --periodic-itr-steps and --pml-itr-steps.")
+    expected = len(args.keep_fractions)
+    if len(args.periodic_itr_steps) != expected or len(args.pml_itr_steps) != expected:
+        raise ValueError(
+            "Each retention-specific ITR step list must contain one value "
+            f"for every --keep-fractions entry ({expected} values expected)."
+        )
+    return {
+        "periodic_theta89": args.periodic_itr_steps,
+        "pml_outside_theta45": args.pml_itr_steps,
+    }
+
+
+def select_itr_step(
+    args: argparse.Namespace,
+    condition: str,
+    fraction: float,
+    fraction_index: int,
+    retention_steps: dict[str, list[str]] | None,
+) -> str:
+    """Select the ITR step for one condition and retention value."""
+    if retention_steps is not None:
+        return retention_steps[condition][fraction_index]
     itr_steps = {
         "periodic_theta89": args.periodic_itr_step,
         "pml_outside_theta45": args.pml_itr_step,
@@ -209,117 +252,112 @@ def reconstruction(args: argparse.Namespace) -> None:
         "periodic_theta89": args.periodic_full_retention_itr_step,
         "pml_outside_theta45": args.pml_full_retention_itr_step,
     }
-    retention_itr_steps = None
-    if args.periodic_itr_steps is not None or args.pml_itr_steps is not None:
-        if args.periodic_itr_steps is None or args.pml_itr_steps is None:
-            raise ValueError("Provide both --periodic-itr-steps and --pml-itr-steps.")
-        expected = len(args.keep_fractions)
-        if len(args.periodic_itr_steps) != expected or len(args.pml_itr_steps) != expected:
-            raise ValueError(
-                "Each retention-specific ITR step list must contain one value "
-                f"for every --keep-fractions entry ({expected} values expected)."
-            )
-        retention_itr_steps = {
-            "periodic_theta89": args.periodic_itr_steps,
-            "pml_outside_theta45": args.pml_itr_steps,
+    return (
+        full_retention_itr_steps[condition] if np.isclose(fraction, 1.0) else itr_steps[condition]
+    )
+
+
+def append_reconstruction_metrics(
+    paths: dict[str, Path],
+    condition: str,
+    fraction: float,
+    seed: int,
+    args: argparse.Namespace,
+    rng: np.random.Generator,
+    rows: list[dict],
+) -> None:
+    """Append uncertainty summaries while preserving bootstrap call order."""
+    for method, path in paths.items():
+        if not path.exists():
+            if not args.allow_missing:
+                raise FileNotFoundError(path)
+            continue
+        values = per_sample_metrics(path)
+        row = {
+            "condition": condition,
+            "keep_fraction": fraction,
+            "seed": seed,
+            "method": method,
+            "num_samples": len(values["relative_l2"]),
         }
+        for metric, samples in values.items():
+            low, high = bootstrap_ci(samples, rng, args.bootstrap_draws)
+            row[f"{metric}_mean"] = float(np.nanmean(samples))
+            row[f"{metric}_ci95_low"] = low
+            row[f"{metric}_ci95_high"] = high
+        rows.append(row)
 
-    for fraction_index, fraction in enumerate(args.keep_fractions):
-        for seed in args.seeds:
-            for condition in CONDITIONS:
-                tag = reconstruction_tag(condition, args.split, fraction, seed)
-                if retention_itr_steps is not None:
-                    itr_step = retention_itr_steps[condition][fraction_index]
-                else:
-                    itr_step = (
-                        full_retention_itr_steps[condition]
-                        if np.isclose(fraction, 1.0)
-                        else itr_steps[condition]
-                    )
-                paths = method_paths(root, condition, tag, itr_step)
-                for method, path in paths.items():
-                    if not path.exists():
-                        if not args.allow_missing:
-                            raise FileNotFoundError(path)
-                        continue
-                    values = per_sample_metrics(path)
-                    row = {
-                        "condition": condition,
-                        "keep_fraction": fraction,
-                        "seed": seed,
-                        "method": method,
-                        "num_samples": len(values["relative_l2"]),
-                    }
-                    for metric, samples in values.items():
-                        low, high = bootstrap_ci(samples, rng, args.bootstrap_draws)
-                        row[f"{metric}_mean"] = float(np.nanmean(samples))
-                        row[f"{metric}_ci95_low"] = low
-                        row[f"{metric}_ci95_high"] = high
-                    rows.append(row)
 
-                gd_path, itr_path = paths["Gradient descent (1/L)"], paths["Iterated time reversal"]
-                if gd_path.exists() and itr_path.exists():
-                    series = (("GD", np.load(gd_path)), ("Iterated TR", np.load(itr_path)))
-                    figure, axes = plt.subplots(1, 2, figsize=(11, 4.2), constrained_layout=True)
-                    for method, data in series:
-                        for metric_key, metric_label, style in (
-                            ("residual_history", "residual", "-"),
-                            ("error_history", "rel-L2", "--"),
-                        ):
-                            histories = data[metric_key]
-                            mean = histories.mean(axis=0)
-                            low, high = np.quantile(histories, [0.025, 0.975], axis=0)
-                            x = np.arange(len(mean))
-                            fits.append(
-                                {
-                                    "condition": condition,
-                                    "keep_fraction": fraction,
-                                    "seed": seed,
-                                    "method": method,
-                                    "metric": metric_label,
-                                    **fit_curve(mean),
-                                }
-                            )
-                            for axis, scale in zip(axes, ("semilogy", "loglog"), strict=False):
-                                start = 0 if scale == "semilogy" else 1
-                                getattr(axis, scale)(
-                                    x[start:], mean[start:], style, label=f"{method} {metric_label}"
-                                )
-                                axis.fill_between(x[start:], low[start:], high[start:], alpha=0.10)
-                    for axis, title in zip(
-                        axes, ("Semilog convergence", "Loglog convergence"), strict=False
-                    ):
-                        axis.set(
-                            title=title, xlabel="iteration", ylabel="mean with 95% sample interval"
-                        )
-                        axis.grid(alpha=0.3)
-                        axis.legend(fontsize=8)
-                    figure.savefig(output / f"{tag}_convergence_with_intervals.png", dpi=200)
-                    plt.close(figure)
+def append_convergence_diagnostics(
+    paths: dict[str, Path],
+    output: Path,
+    tag: str,
+    condition: str,
+    fraction: float,
+    seed: int,
+    fits: list[dict],
+    lipschitz: list[dict],
+) -> None:
+    """Append convergence and Lipschitz summaries and save their diagnostic plot."""
+    gd_path = paths["Gradient descent (1/L)"]
+    itr_path = paths["Iterated time reversal"]
+    if not gd_path.exists() or not itr_path.exists():
+        return
 
-                    gd = np.load(gd_path)
-                    if "lipschitz" in gd and "step_size" in gd:
-                        lipschitz.append(
-                            {
-                                "condition": condition,
-                                "keep_fraction": fraction,
-                                "seed": seed,
-                                "num_samples": len(gd["lipschitz"]),
-                                "lipschitz_mean": float(gd["lipschitz"].mean()),
-                                "lipschitz_std": float(gd["lipschitz"].std(ddof=1)),
-                                "lipschitz_min": float(gd["lipschitz"].min()),
-                                "lipschitz_max": float(gd["lipschitz"].max()),
-                                "step_size_mean": float(gd["step_size"].mean()),
-                                "step_size_std": float(gd["step_size"].std(ddof=1)),
-                            }
-                        )
+    series = (("GD", np.load(gd_path)), ("Iterated TR", np.load(itr_path)))
+    figure, axes = plt.subplots(1, 2, figsize=(11, 4.2), constrained_layout=True)
+    for method, data in series:
+        for metric_key, metric_label, style in (
+            ("residual_history", "residual", "-"),
+            ("error_history", "rel-L2", "--"),
+        ):
+            histories = data[metric_key]
+            mean = histories.mean(axis=0)
+            low, high = np.quantile(histories, [0.025, 0.975], axis=0)
+            x = np.arange(len(mean))
+            fits.append(
+                {
+                    "condition": condition,
+                    "keep_fraction": fraction,
+                    "seed": seed,
+                    "method": method,
+                    "metric": metric_label,
+                    **fit_curve(mean),
+                }
+            )
+            for axis, scale in zip(axes, ("semilogy", "loglog"), strict=False):
+                start = 0 if scale == "semilogy" else 1
+                getattr(axis, scale)(
+                    x[start:], mean[start:], style, label=f"{method} {metric_label}"
+                )
+                axis.fill_between(x[start:], low[start:], high[start:], alpha=0.10)
+    for axis, title in zip(axes, ("Semilog convergence", "Loglog convergence"), strict=False):
+        axis.set(title=title, xlabel="iteration", ylabel="mean with 95% sample interval")
+        axis.grid(alpha=0.3)
+        axis.legend(fontsize=8)
+    figure.savefig(output / f"{tag}_convergence_with_intervals.png", dpi=200)
+    plt.close(figure)
 
-    if not rows:
-        raise FileNotFoundError("No reconstruction outputs matched the requested fractions/seeds.")
-    write_csv(output / "reconstruction_with_uncertainty.csv", rows)
-    write_csv(output / "convergence_fits.csv", fits)
-    write_csv(output / "lipschitz_step_size_summary.csv", lipschitz)
+    gd = np.load(gd_path)
+    if "lipschitz" in gd and "step_size" in gd:
+        lipschitz.append(
+            {
+                "condition": condition,
+                "keep_fraction": fraction,
+                "seed": seed,
+                "num_samples": len(gd["lipschitz"]),
+                "lipschitz_mean": float(gd["lipschitz"].mean()),
+                "lipschitz_std": float(gd["lipschitz"].std(ddof=1)),
+                "lipschitz_min": float(gd["lipschitz"].min()),
+                "lipschitz_max": float(gd["lipschitz"].max()),
+                "step_size_mean": float(gd["step_size"].mean()),
+                "step_size_std": float(gd["step_size"].std(ddof=1)),
+            }
+        )
 
+
+def plot_retention_robustness(rows: list[dict], args: argparse.Namespace, output: Path) -> None:
+    """Plot reconstruction error against measurement retention."""
     figure, axes = plt.subplots(
         1, len(CONDITIONS), figsize=(12, 4.5), sharey=True, constrained_layout=True
     )
@@ -354,10 +392,42 @@ def reconstruction(args: argparse.Namespace) -> None:
         axis.legend(fontsize=7)
     figure.savefig(output / "retention_robustness.png", dpi=200)
     plt.close(figure)
+
+
+def reconstruction(args: argparse.Namespace) -> None:
+    """Summarise reconstruction uncertainty and finite-iteration diagnostics."""
+    root = ROOT / "results" / "reconstruction" / args.dataset
+    output = ROOT / "results" / "evaluation" / args.dataset / "required_experiments"
+    output.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(args.bootstrap_seed)
+    rows, fits, lipschitz = [], [], []
+    retention_itr_steps = retention_specific_itr_steps(args)
+
+    for fraction_index, fraction in enumerate(args.keep_fractions):
+        for seed in args.seeds:
+            for condition in CONDITIONS:
+                tag = reconstruction_tag(condition, args.split, fraction, seed)
+                itr_step = select_itr_step(
+                    args, condition, fraction, fraction_index, retention_itr_steps
+                )
+                paths = method_paths(root, condition, tag, itr_step)
+                append_reconstruction_metrics(paths, condition, fraction, seed, args, rng, rows)
+                append_convergence_diagnostics(
+                    paths, output, tag, condition, fraction, seed, fits, lipschitz
+                )
+
+    if not rows:
+        raise FileNotFoundError("No reconstruction outputs matched the requested fractions/seeds.")
+    write_csv(output / "reconstruction_with_uncertainty.csv", rows)
+    write_csv(output / "convergence_fits.csv", fits)
+    write_csv(output / "lipschitz_step_size_summary.csv", lipschitz)
+
+    plot_retention_robustness(rows, args, output)
     print(f"Saved reconstruction analysis in {output}")
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse the required-experiment analysis command line."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", default="mnist_medium_v1")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -389,6 +459,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Dispatch the requested analysis subcommand."""
     args = parse_args()
     args.function(args)
 
