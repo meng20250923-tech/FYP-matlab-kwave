@@ -125,6 +125,7 @@ def _fourier_reconstructions(observed_pressure: np.ndarray, condition: str) -> n
 
 
 def _assert_close(name: str, actual: float, expected: float, tolerance: float) -> None:
+    """Require one scalar result to match its fixed reference value."""
     if not np.isclose(actual, expected, atol=tolerance, rtol=0.0):
         raise AssertionError(
             f"{name}={actual:.10g} does not match expected {expected:.10g} "
@@ -132,50 +133,101 @@ def _assert_close(name: str, actual: float, expected: float, tolerance: float) -
         )
 
 
-def run_check(config_path: str | Path, output_override: Path | None = None) -> dict[str, Any]:
-    """Execute the reproducibility workflow and return its summary."""
-    config = load_experiment_config(config_path)
-    samples = _load_samples(_repository_path(config["sample_data"]), config["sample_count"])
-    expected = json.loads(_repository_path(config["expected_results"]).read_text(encoding="utf-8"))
-    timings: dict[str, float] = {}
-
+def _timed_call(operation, *args) -> tuple[Any, float]:
+    """Evaluate one operation and return its result and elapsed seconds."""
     start = time.perf_counter()
-    fourier = _fourier_predictions(samples["initial_pressure"], config["condition"])
-    timings["fourier_forward_seconds"] = time.perf_counter() - start
-    maximum_difference = float(np.max(np.abs(fourier - samples["fourier_prediction"])))
-    if maximum_difference > config["tolerances"]["array_atol"]:
-        raise AssertionError(
-            "Recomputed Fourier predictions differ from the supplied reference by "
-            f"{maximum_difference:.6g}."
-        )
+    result = operation(*args)
+    return result, time.perf_counter() - start
 
-    start = time.perf_counter()
-    fno = _fno_predictions(samples["initial_pressure"], _repository_path(config["checkpoint"]))
-    timings["fno_forward_seconds"] = time.perf_counter() - start
 
-    start = time.perf_counter()
-    reconstruction = _fourier_reconstructions(samples["observed_pressure"], config["condition"])
-    timings["fourier_inverse_seconds"] = time.perf_counter() - start
+def _assert_array_difference(
+    message: str,
+    actual: np.ndarray,
+    expected: np.ndarray,
+    tolerance: float,
+    *,
+    report_difference: bool = True,
+) -> float:
+    """Validate two arrays and return their maximum absolute difference."""
+    maximum_difference = float(np.max(np.abs(actual - expected)))
+    if maximum_difference > tolerance:
+        detail = f" {maximum_difference:.6g}." if report_difference else ""
+        raise AssertionError(f"{message}{detail}")
+    return maximum_difference
 
-    metrics = {
-        "fourier_forward": batch_metrics(fourier, samples["kwave_target"]),
-        "fno_only_forward": batch_metrics(fno, samples["kwave_target"]),
-        "fourier_inverse": batch_metrics(reconstruction, samples["initial_pressure"]),
-    }
-    actual_retention = float(samples["mask_25"].mean())
-    observed_difference = float(
-        np.max(np.abs(samples["observed_pressure"] - samples["mask_25"] * samples["kwave_target"]))
+
+def _evaluate_operators(
+    samples: dict[str, np.ndarray],
+    config: dict[str, Any],
+) -> tuple[dict[str, np.ndarray], dict[str, float]]:
+    """Evaluate the fixed forward and inverse operators with timings."""
+    fourier, fourier_seconds = _timed_call(
+        _fourier_predictions,
+        samples["initial_pressure"],
+        config["condition"],
     )
-    if observed_difference > config["tolerances"]["array_atol"]:
-        raise AssertionError("Observed pressure is inconsistent with the supplied mask.")
+    fno, fno_seconds = _timed_call(
+        _fno_predictions,
+        samples["initial_pressure"],
+        _repository_path(config["checkpoint"]),
+    )
+    reconstruction, inverse_seconds = _timed_call(
+        _fourier_reconstructions,
+        samples["observed_pressure"],
+        config["condition"],
+    )
+    predictions = {
+        "fourier": fourier,
+        "fno": fno,
+        "reconstruction": reconstruction,
+    }
+    timings = {
+        "fourier_forward_seconds": fourier_seconds,
+        "fno_forward_seconds": fno_seconds,
+        "fourier_inverse_seconds": inverse_seconds,
+    }
+    return predictions, timings
 
-    tolerance = config["tolerances"]["metric_atol"]
+
+def _compute_metrics(
+    samples: dict[str, np.ndarray],
+    predictions: dict[str, np.ndarray],
+) -> dict[str, dict[str, float]]:
+    """Compute the three metric groups reported by the example."""
+    return {
+        "fourier_forward": batch_metrics(predictions["fourier"], samples["kwave_target"]),
+        "fno_only_forward": batch_metrics(predictions["fno"], samples["kwave_target"]),
+        "fourier_inverse": batch_metrics(
+            predictions["reconstruction"],
+            samples["initial_pressure"],
+        ),
+    }
+
+
+def _validate_metrics(
+    metrics: dict[str, dict[str, float]],
+    expected: dict[str, Any],
+    actual_retention: float,
+    tolerance: float,
+) -> None:
+    """Compare every reported metric with the versioned expected results."""
     for group, values in metrics.items():
         for metric, value in values.items():
             _assert_close(f"{group}.{metric}", value, expected[group][metric], tolerance)
     _assert_close("actual_retention", actual_retention, expected["actual_retention"], tolerance)
 
-    summary: dict[str, Any] = {
+
+def _build_summary(
+    config: dict[str, Any],
+    samples: dict[str, np.ndarray],
+    reconstruction: np.ndarray,
+    metrics: dict[str, dict[str, float]],
+    timings: dict[str, float],
+    actual_retention: float,
+    maximum_difference: float,
+) -> dict[str, Any]:
+    """Construct the stable machine-readable verification summary."""
+    return {
         "status": "PASS",
         "condition": config["condition"],
         "sample_count": config["sample_count"],
@@ -191,6 +243,39 @@ def run_check(config_path: str | Path, output_override: Path | None = None) -> d
             "reconstruction": list(reconstruction.shape),
         },
     }
+
+
+def run_check(config_path: str | Path, output_override: Path | None = None) -> dict[str, Any]:
+    """Execute the reproducibility workflow and return its summary."""
+    config = load_experiment_config(config_path)
+    samples = _load_samples(_repository_path(config["sample_data"]), config["sample_count"])
+    expected = json.loads(_repository_path(config["expected_results"]).read_text(encoding="utf-8"))
+    predictions, timings = _evaluate_operators(samples, config)
+    maximum_difference = _assert_array_difference(
+        "Recomputed Fourier predictions differ from the supplied reference by",
+        predictions["fourier"],
+        samples["fourier_prediction"],
+        config["tolerances"]["array_atol"],
+    )
+    metrics = _compute_metrics(samples, predictions)
+    actual_retention = float(samples["mask_25"].mean())
+    _assert_array_difference(
+        "Observed pressure is inconsistent with the supplied mask.",
+        samples["observed_pressure"],
+        samples["mask_25"] * samples["kwave_target"],
+        config["tolerances"]["array_atol"],
+        report_difference=False,
+    )
+    _validate_metrics(metrics, expected, actual_retention, config["tolerances"]["metric_atol"])
+    summary = _build_summary(
+        config,
+        samples,
+        predictions["reconstruction"],
+        metrics,
+        timings,
+        actual_retention,
+        maximum_difference,
+    )
     output_path = output_override or _repository_path(config["output"])
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
