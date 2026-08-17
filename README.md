@@ -8,12 +8,20 @@ The project investigates whether Fourier neural operators can provide fast forwa
 
 ## Methods
 
+The complete data-generation, forward-evaluation, and reconstruction workflow is summarised below.
+
+![Methodological workflow](results/figures/method/experimental_workflow.png)
+
 k-Wave is used as the reference numerical forward model. Four alternative forward operators are evaluated:
 
 - **Fourier:** a homogeneous-medium analytical approximation;
 - **FNO-only:** an FNO that learns the complete map from initial pressure to detector-time pressure data;
 - **Fourier-to-FNO:** an FNO that corrects an analytical Fourier prediction in measurement space;
 - **FNO-to-Fourier:** an FNO that corrects the initial-pressure image before analytical Fourier propagation.
+
+The shared FNO backbone, including coordinate augmentation, spectral layers, and pointwise projection, is shown below.
+
+![FNO architecture](results/figures/method/fno_architecture.png)
 
 The operators are evaluated under periodic 89-degree and PML 45-degree acquisition conditions. Their predictive accuracy, training-sample efficiency, and runtime are assessed using two-dimensional MNIST-derived initial-pressure images.
 
