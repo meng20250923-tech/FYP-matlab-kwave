@@ -20,6 +20,7 @@ import numpy as np
 from pat_fno.data.mnist import ROOT
 
 CONDITIONS = ("periodic_theta89", "pml_outside_theta45")
+RETENTION_FRACTIONS = (0.10, 0.25, 0.50, 1.00)
 CONDITION_LABELS = {
     "periodic_theta89": r"Periodic $89^\circ$",
     "pml_outside_theta45": r"PML $45^\circ$",
@@ -63,16 +64,36 @@ ITR_VALIDATION_STEPS = {
     ("pml_outside_theta45", 0.10): (0.5, 1.0, 1.5, 2.0, 2.5),
     ("pml_outside_theta45", 0.25): (0.5, 1.0, 1.5, 2.0, 2.5),
     ("pml_outside_theta45", 0.50): (0.5, 1.0, 1.5, 2.0, 2.5),
-    ("pml_outside_theta45", 1.00): (0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5),
+    ("pml_outside_theta45", 1.00): (
+        0.1,
+        0.25,
+        0.5,
+        0.75,
+        1.0,
+        1.25,
+        1.5,
+        1.75,
+        2.0,
+        2.25,
+        2.5,
+    ),
 }
+
+LEARNED_FORWARD_SCENARIOS = (
+    ("fno_only", "FNO-only"),
+    ("fourier_to_fno", "Fourier-to-FNO"),
+    ("fno_to_fourier", "FNO-to-Fourier"),
+)
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
+    """Read a CSV file into an ordered list of row dictionaries."""
     with path.open(newline="", encoding="utf-8") as stream:
         return list(csv.DictReader(stream))
 
 
 def setup_style() -> None:
+    """Apply the common publication style to subsequent figures."""
     plt.rcParams.update(
         {
             "figure.figsize": (7.0, 4.6),
@@ -132,6 +153,36 @@ def line_figure(
     save_figure(figure, path)
 
 
+def learned_prediction_path(condition: str, scenario: str) -> Path:
+    """Return the saved large-test prediction archive for one learned model."""
+    return (
+        ROOT / "results/mnist_medium/mnist_large_v1" / condition / scenario / "test_predictions.npz"
+    )
+
+
+def load_prediction_sample(condition: str, scenario: str, sample_index: int) -> np.ndarray:
+    """Load one learned pressure-field prediction without retaining the archive."""
+    with np.load(learned_prediction_path(condition, scenario)) as saved:
+        return np.asarray(saved["prediction"][sample_index])
+
+
+def load_forward_sample(
+    condition: str,
+    sample_index: int,
+) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]:
+    """Load analytical, reference, and learned fields for one large-test sample."""
+    analytical, target = _large_forward_arrays(condition)
+    learned = {
+        scenario: load_prediction_sample(condition, scenario, sample_index)
+        for scenario, _ in LEARNED_FORWARD_SCENARIOS
+    }
+    return (
+        np.asarray(analytical[sample_index]),
+        np.asarray(target[sample_index]),
+        learned,
+    )
+
+
 def plot_sample_efficiency(output: Path) -> None:
     data = read_csv(
         ROOT
@@ -175,7 +226,10 @@ def plot_sample_efficiency(output: Path) -> None:
         axis.set_yscale("log")
         axis.grid(alpha=0.25)
         axis.legend(frameon=False)
-        save_figure(figure, output / "02_sample_efficiency" / f"{condition}_sample_efficiency.png")
+        save_figure(
+            figure,
+            output / "02_sample_efficiency" / f"{condition}_sample_efficiency.png",
+        )
 
 
 def plot_training_curves(output: Path) -> None:
@@ -250,7 +304,7 @@ def plot_reconstruction_metrics(output: Path) -> None:
         / "results/evaluation/mnist_medium_v1"
         / "required_experiments/reconstruction_with_uncertainty.csv"
     )
-    fractions = np.asarray([0.10, 0.25, 0.50, 1.00])
+    fractions = np.asarray(RETENTION_FRACTIONS)
     groups = {
         "classical": (
             "Fourier inverse",
@@ -322,7 +376,7 @@ def plot_itr_step_selection(output: Path) -> None:
     directory = output / "04_reconstruction_metrics" / "itr_step_selection"
     for condition in CONDITIONS:
         color = "#2563EB" if condition == "periodic_theta89" else "#DC2626"
-        for fraction in (0.10, 0.25, 0.50, 1.00):
+        for fraction in RETENTION_FRACTIONS:
             steps = np.asarray(ITR_VALIDATION_STEPS[(condition, fraction)])
             errors = []
             for step in steps:
@@ -358,7 +412,7 @@ def plot_itr_step_selection(output: Path) -> None:
 
 def plot_convergence_panels(output: Path) -> None:
     """Plot four retention levels in one publication-ready row."""
-    fractions = (0.10, 0.25, 0.50, 1.00)
+    fractions = RETENTION_FRACTIONS
     specs = (
         ("relative_l2", r"Mean relative $L_2$ error"),
         ("residual", "Mean measurement residual"),
@@ -424,7 +478,7 @@ def plot_convergence_panels(output: Path) -> None:
 
 def plot_convergence(output: Path) -> None:
     for condition in CONDITIONS:
-        for fraction in (0.10, 0.25, 0.50, 1.00):
+        for fraction in RETENTION_FRACTIONS:
             histories: dict[str, dict[str, np.ndarray]] = {}
             for method, label in (
                 ("Gradient descent (1/L)", "GD"),
@@ -498,7 +552,7 @@ def _large_initial_pressure(sample_index: int) -> np.ndarray:
 
 def plot_forward_error_ecdf(output: Path) -> None:
     labels = ("Fourier", "FNO-only", "Fourier-to-FNO", "FNO-to-Fourier")
-    scenarios = (None, "fno_only", "fourier_to_fno", "fno_to_fourier")
+    scenarios = (None, *(scenario for scenario, _ in LEARNED_FORWARD_SCENARIOS))
     colors = ("#6B7280", "#2563EB", "#059669", "#0891B2")
     for condition in CONDITIONS:
         analytical, target = _large_forward_arrays(condition)
@@ -508,14 +562,7 @@ def plot_forward_error_ecdf(output: Path) -> None:
                 prediction = analytical
                 reference = target
             else:
-                path = (
-                    ROOT
-                    / "results/mnist_medium/mnist_large_v1"
-                    / condition
-                    / scenario
-                    / "test_predictions.npz"
-                )
-                with np.load(path) as saved:
+                with np.load(learned_prediction_path(condition, scenario)) as saved:
                     prediction = saved["prediction"]
                     reference = saved["target"]
             distributions.append(_sample_relative_l2(prediction, reference))
@@ -530,7 +577,10 @@ def plot_forward_error_ecdf(output: Path) -> None:
         axis.set_xlim(left=0)
         axis.set_ylim(0, 1.01)
         axis.legend(frameon=False, loc="lower right")
-        save_figure(figure, output / "01_forward_accuracy" / f"{condition}_forward_error_ecdf.png")
+        save_figure(
+            figure,
+            output / "01_forward_accuracy" / f"{condition}_forward_error_ecdf.png",
+        )
 
 
 def plot_forward_prediction_examples(output: Path, sample_index: int) -> None:
@@ -550,23 +600,15 @@ def plot_forward_prediction_examples(output: Path, sample_index: int) -> None:
     axis.set_ylabel("$y$ index")
     save_figure(figure, directory / "initial_pressure.png")
     for condition in CONDITIONS:
-        analytical, target = _large_forward_arrays(condition)
+        analytical, target, learned = load_forward_sample(condition, sample_index)
         fields: dict[str, np.ndarray] = {
-            "fourier": np.asarray(analytical[sample_index]),
-            "kwave_reference": np.asarray(target[sample_index]),
+            "fourier": analytical,
+            "kwave_reference": target,
         }
         for name, scenario in methods:
             if scenario in (None, "reference"):
                 continue
-            prediction_path = (
-                ROOT
-                / "results/mnist_medium/mnist_large_v1"
-                / condition
-                / scenario
-                / "test_predictions.npz"
-            )
-            with np.load(prediction_path) as saved:
-                fields[name] = np.asarray(saved["prediction"][sample_index])
+            fields[name] = learned[scenario]
         lower = min(float(field.min()) for field in fields.values())
         upper = max(float(field.max()) for field in fields.values())
         for name, _ in methods:
@@ -587,6 +629,7 @@ def plot_forward_prediction_examples(output: Path, sample_index: int) -> None:
 def plot_forward_error_maps(output: Path, sample_index: int) -> None:
     """Save large-test absolute forward-error maps as independent panels."""
     directory = output / "01_forward_accuracy" / "forward_error_maps"
+    directory.mkdir(parents=True, exist_ok=True)
     methods = (
         ("fourier", None),
         ("fno_only", "fno_only"),
@@ -595,22 +638,12 @@ def plot_forward_error_maps(output: Path, sample_index: int) -> None:
     )
     errors: dict[tuple[str, str], np.ndarray] = {}
     for condition in CONDITIONS:
-        analytical, target = _large_forward_arrays(condition)
-        reference = np.asarray(target[sample_index])
-        errors[(condition, "fourier")] = np.abs(np.asarray(analytical[sample_index]) - reference)
+        analytical, reference, learned = load_forward_sample(condition, sample_index)
+        errors[(condition, "fourier")] = np.abs(analytical - reference)
         for name, scenario in methods:
             if scenario is None:
                 continue
-            prediction_path = (
-                ROOT
-                / "results/mnist_medium/mnist_large_v1"
-                / condition
-                / scenario
-                / "test_predictions.npz"
-            )
-            with np.load(prediction_path) as saved:
-                prediction = np.asarray(saved["prediction"][sample_index])
-            errors[(condition, name)] = np.abs(prediction - reference)
+            errors[(condition, name)] = np.abs(learned[scenario] - reference)
 
     vmax = float(np.percentile(np.concatenate([error.ravel() for error in errors.values()]), 99))
     colorbar_figure, colorbar_axis = plt.subplots(figsize=(0.8, 3.5))
@@ -660,24 +693,16 @@ def plot_forward_sensor_traces(output: Path, sample_index: int) -> None:
         ("k-Wave reference", "reference", "#000000", "-", 2.4),
     )
     for condition in CONDITIONS:
-        analytical, target = _large_forward_arrays(condition)
-        sensor_index = int(target.shape[1] // 2)
+        analytical, target, learned = load_forward_sample(condition, sample_index)
+        sensor_index = int(target.shape[0] // 2)
         traces: dict[str, np.ndarray] = {
-            "Fourier": np.asarray(analytical[sample_index, sensor_index]),
-            "k-Wave reference": np.asarray(target[sample_index, sensor_index]),
+            "Fourier": np.asarray(analytical[sensor_index]),
+            "k-Wave reference": np.asarray(target[sensor_index]),
         }
         for label, scenario, _, _, _ in methods:
             if scenario in (None, "reference"):
                 continue
-            prediction_path = (
-                ROOT
-                / "results/mnist_medium/mnist_large_v1"
-                / condition
-                / scenario
-                / "test_predictions.npz"
-            )
-            with np.load(prediction_path) as saved:
-                traces[label] = np.asarray(saved["prediction"][sample_index, sensor_index])
+            traces[label] = np.asarray(learned[scenario][sensor_index])
 
         figure, axis = plt.subplots(figsize=(7.2, 4.6))
         for label, _, color, linestyle, linewidth in methods:
@@ -773,12 +798,22 @@ def plot_acquisition_geometry(output: Path) -> None:
             )
         axis.add_patch(
             Rectangle(
-                (-1.0, -1.0), 2.0, 2.0, facecolor="#F8FAFC", edgecolor="#111827", linewidth=1.5
+                (-1.0, -1.0),
+                2.0,
+                2.0,
+                facecolor="#F8FAFC",
+                edgecolor="#111827",
+                linewidth=1.5,
             )
         )
         axis.add_patch(
             Rectangle(
-                (-0.78, -0.82), 1.56, 0.65, facecolor="#DBEAFE", edgecolor="#2563EB", linewidth=1.2
+                (-0.78, -0.82),
+                1.56,
+                0.65,
+                facecolor="#DBEAFE",
+                edgecolor="#2563EB",
+                linewidth=1.2,
             )
         )
         axis.text(0, -0.50, r"Source domain $p_0$", ha="center", va="center")
@@ -798,10 +833,24 @@ def plot_acquisition_geometry(output: Path) -> None:
         sensor_x = np.linspace(-0.92, 0.92, 16)
         axis.scatter(sensor_x, np.zeros_like(sensor_x), s=18, color="#DC2626", zorder=5)
         axis.text(
-            0, 0.07, "64-point detector line", ha="center", va="bottom", color="#991B1B", fontsize=9
+            0,
+            0.07,
+            "64-point detector line",
+            ha="center",
+            va="bottom",
+            color="#991B1B",
+            fontsize=9,
         )
         axis.add_patch(
-            Arc((0, 0), 1.10, 1.10, theta1=-angle, theta2=0, color="#D97706", linewidth=2)
+            Arc(
+                (0, 0),
+                1.10,
+                1.10,
+                theta1=-angle,
+                theta2=0,
+                color="#D97706",
+                linewidth=2,
+            )
         )
         radius = 0.55
         axis.plot(
@@ -937,7 +986,8 @@ def plot_reconstruction_keep025_correlation(output: Path) -> None:
     axis.set_ylim(0, 1)
     axis.legend(frameon=False)
     save_figure(
-        figure, output / "04_reconstruction_metrics" / "keep0.25_correlation_comparison.png"
+        figure,
+        output / "04_reconstruction_metrics" / "keep0.25_correlation_comparison.png",
     )
 
 
@@ -979,7 +1029,7 @@ def plot_complete_reconstruction_montages(output: Path, sample_index: int) -> No
 
 def plot_retention_montages(output: Path, sample_index: int) -> None:
     """Save one reconstruction per method, condition, and retention level."""
-    fractions = (0.10, 0.25, 0.50, 1.00)
+    fractions = RETENTION_FRACTIONS
     methods = (
         ("Gradient descent (1/L)", "Gradient descent"),
         ("Iterated time reversal", "Iterated TR"),
@@ -1003,6 +1053,7 @@ def plot_retention_montages(output: Path, sample_index: int) -> None:
 
 
 def write_readme(output: Path) -> None:
+    """Document the generated figure-directory structure."""
     text = """# Dissertation figure set
 
 All figures in this directory are generated by
@@ -1027,7 +1078,8 @@ across three independent training seeds at every tested training-set size.
     (output / "README.md").write_text(text, encoding="utf-8")
 
 
-def main() -> None:
+def parse_args() -> argparse.Namespace:
+    """Parse command-line options for structured figure generation."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--output",
@@ -1041,27 +1093,42 @@ def main() -> None:
         action="store_true",
         help="Remove only the selected output directory before regeneration.",
     )
-    args = parser.parse_args()
-    if args.clean and args.output.exists():
-        shutil.rmtree(args.output)
-    args.output.mkdir(parents=True, exist_ok=True)
+    return parser.parse_args()
+
+
+def generate_figure_set(output: Path, sample_index: int) -> None:
+    """Generate the complete structured thesis figure set."""
     setup_style()
     # Method diagrams in 00_method_diagrams are curated separately.
-    plot_forward_error_ecdf(args.output)
-    plot_forward_prediction_examples(args.output, args.sample_index)
-    plot_forward_error_maps(args.output, args.sample_index)
-    plot_forward_sensor_traces(args.output, args.sample_index)
-    plot_training_curves(args.output)
-    plot_sample_efficiency(args.output)
-    plot_runtime(args.output)
-    plot_reconstruction_metrics(args.output)
-    plot_reconstruction_keep025_comparison(args.output)
-    plot_reconstruction_keep025_correlation(args.output)
-    plot_convergence(args.output)
+    plot_forward_error_ecdf(output)
+    plot_forward_prediction_examples(output, sample_index)
+    plot_forward_error_maps(output, sample_index)
+    plot_forward_sensor_traces(output, sample_index)
+    plot_training_curves(output)
+    plot_sample_efficiency(output)
+    plot_runtime(output)
+    plot_reconstruction_metrics(output)
+    plot_reconstruction_keep025_comparison(output)
+    plot_reconstruction_keep025_correlation(output)
+    plot_convergence(output)
     # Legacy multi-panel convergence files are preserved but not regenerated.
-    plot_complete_reconstruction_montages(args.output, args.sample_index)
-    plot_retention_montages(args.output, args.sample_index)
-    write_readme(args.output)
+    plot_complete_reconstruction_montages(output, sample_index)
+    plot_retention_montages(output, sample_index)
+    write_readme(output)
+
+
+def prepare_output_directory(output: Path, clean: bool) -> None:
+    """Create the output directory, optionally removing its existing contents."""
+    if clean and output.exists():
+        shutil.rmtree(output)
+    output.mkdir(parents=True, exist_ok=True)
+
+
+def main() -> None:
+    """Generate all configured figures from saved experiment results."""
+    args = parse_args()
+    prepare_output_directory(args.output, args.clean)
+    generate_figure_set(args.output, args.sample_index)
     print(f"Saved structured thesis figures in {args.output}")
 
 
