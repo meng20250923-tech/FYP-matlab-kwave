@@ -12,6 +12,8 @@ The complete data-generation, forward-evaluation, and reconstruction workflow is
 
 ![Methodological workflow](results/figures/method/experimental_workflow.png)
 
+*Overview of the data-generation, forward-evaluation, measurement-subsampling, and reconstruction workflow.*
+
 k-Wave is used as the reference numerical forward model. Four alternative forward operators are evaluated:
 
 - **Fourier:** a homogeneous-medium analytical approximation;
@@ -22,6 +24,8 @@ k-Wave is used as the reference numerical forward model. Four alternative forwar
 The shared FNO backbone, including coordinate augmentation, spectral layers, and pointwise projection, is shown below.
 
 ![FNO architecture](results/figures/method/fno_architecture.png)
+
+*Architecture of the shared FNO backbone and the computation performed within each spectral layer.*
 
 The operators are evaluated under periodic 89-degree and PML 45-degree acquisition conditions. Their predictive accuracy, training-sample efficiency, and runtime are assessed using two-dimensional MNIST-derived initial-pressure images.
 
