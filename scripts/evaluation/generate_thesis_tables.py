@@ -16,7 +16,10 @@ ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "results"
 OUT = RESULTS / "evaluation" / "thesis_tables"
 
-COND = {"periodic_theta89": "Periodic $89^\\circ$", "pml_outside_theta45": "PML $45^\\circ$"}
+COND = {
+    "periodic_theta89": "Periodic $89^\\circ$",
+    "pml_outside_theta45": "PML $45^\\circ$",
+}
 METHOD = {
     "Fourier inverse": "Fourier inverse",
     "Time reversal": "\\kwave{} time reversal",
@@ -59,9 +62,8 @@ def table(caption, label, body, size="\\small"):
 \\end{{table}}"""
 
 
-def main() -> None:
-    """Generate every dissertation table from saved summaries."""
-    OUT.mkdir(parents=True, exist_ok=True)
+def generate_method_taxonomy() -> None:
+    """Generate the forward-operator taxonomy table."""
     # 1 Method taxonomy
     save(
         "01_method_taxonomy",
@@ -83,7 +85,9 @@ def main() -> None:
         ),
     )
 
-    # 2 acquisition
+
+def generate_acquisition_table() -> None:
+    """Generate the physical acquisition and dataset table."""
     save(
         "02_acquisition",
         table(
@@ -107,7 +111,9 @@ def main() -> None:
         ),
     )
 
-    # 3--4 experimental protocols
+
+def generate_protocol_tables() -> None:
+    """Generate the forward-training and reconstruction protocol tables."""
     save(
         "03_forward_protocol",
         table(
@@ -148,7 +154,9 @@ def main() -> None:
         ),
     )
 
-    # 4 forward accuracy
+
+def generate_forward_accuracy_table() -> None:
+    """Generate the held-out forward-accuracy table."""
     blocks = []
     for scale, path, _n in [
         ("Medium", RESULTS / "mnist_medium/mnist_medium_v1/comparison.json", 1000),
@@ -203,7 +211,9 @@ def main() -> None:
         ),
     )
 
-    # 5 sample efficiency
+
+def generate_sample_efficiency_table() -> None:
+    """Generate the sample-efficiency table."""
     se = rows(
         RESULTS / "evaluation/mnist_large_v1/required_experiments/sample_efficiency_summary.csv"
     )
@@ -248,7 +258,9 @@ def main() -> None:
         ),
     )
 
-    # 6 runtime
+
+def generate_runtime_table() -> None:
+    """Generate the forward-runtime table."""
     sources = {
         "CPU, batch 1": ("cpu", 1),
         "RTX 4090, batch 1": ("cuda_batch1", 1),
@@ -300,7 +312,9 @@ def main() -> None:
         ),
     )
 
-    # 7 ITR selection
+
+def generate_itr_selection_table() -> None:
+    """Generate the validation-selected ITR step-size table."""
     itrroot = RESULTS / "reconstruction/mnist_medium_v1/iterated_time_reversal"
     spec = [
         ("periodic_theta89", ".25", "0.5, 1, 1.5, 2, 2.5", "1.5", 100, 80),
@@ -334,14 +348,21 @@ def main() -> None:
         ),
     )
 
-    # Uncertainty rows shared by 8/9
+
+def load_reconstruction_uncertainty() -> dict[tuple[str, float, str], dict[str, str]]:
+    """Load reconstruction uncertainty rows indexed by experiment identity."""
     unc = rows(
         RESULTS
         / "evaluation/mnist_medium_v1/required_experiments/reconstruction_with_uncertainty.csv"
     )
-    U = {(r["condition"], float(r["keep_fraction"]), r["method"]): r for r in unc}
+    return {(r["condition"], float(r["keep_fraction"]), r["method"]): r for r in unc}
 
-    # 8 25% reconstruction
+
+def generate_reconstruction_25_table(
+    uncertainty: dict[tuple[str, float, str], dict[str, str]],
+) -> None:
+    """Generate the detailed 25% retention reconstruction table."""
+    U = uncertainty
     lines = []
     for c in COND:
         for j, m in enumerate(METHOD):
@@ -374,7 +395,12 @@ def main() -> None:
         ),
     )
 
-    # 9 robustness full rel L2
+
+def generate_reconstruction_robustness_table(
+    uncertainty: dict[tuple[str, float, str], dict[str, str]],
+) -> None:
+    """Generate the reconstruction robustness table."""
+    U = uncertainty
     lines = []
     for c in COND:
         for j, m in enumerate(METHOD):
@@ -408,7 +434,9 @@ def main() -> None:
         ),
     )
 
-    # 11--12 Lipschitz and convergence diagnostics
+
+def generate_convergence_diagnostic_tables() -> None:
+    """Generate the Lipschitz and finite-iteration diagnostic tables."""
     lip = rows(
         RESULTS / "evaluation/mnist_medium_v1/required_experiments/lipschitz_step_size_summary.csv"
     )
@@ -467,6 +495,9 @@ def main() -> None:
         ),
     )
 
+
+def write_manifest() -> None:
+    """Record the authoritative result sources used by the table generator."""
     manifest = {
         "authoritative_sources": [
             "results/mnist_medium/mnist_medium_v1/comparison.json",
@@ -481,6 +512,23 @@ def main() -> None:
         "excluded": "archive_pre_robustness and smoke outputs",
     }
     (OUT / "manifest.json").write_text(json.dumps(manifest, indent=2))
+
+
+def main() -> None:
+    """Generate every dissertation table from saved summaries."""
+    OUT.mkdir(parents=True, exist_ok=True)
+    generate_method_taxonomy()
+    generate_acquisition_table()
+    generate_protocol_tables()
+    generate_forward_accuracy_table()
+    generate_sample_efficiency_table()
+    generate_runtime_table()
+    generate_itr_selection_table()
+    uncertainty = load_reconstruction_uncertainty()
+    generate_reconstruction_25_table(uncertainty)
+    generate_reconstruction_robustness_table(uncertainty)
+    generate_convergence_diagnostic_tables()
+    write_manifest()
     print(f"Saved 12 table blocks in {OUT}")
 
 
