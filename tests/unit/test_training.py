@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -231,3 +232,102 @@ def test_fno_to_fourier_prediction_is_normalised(monkeypatch) -> None:
         prediction,
         torch.full((2, 3, 5), 2.0),
     )
+
+
+def test_training_subset_matches_sorted_shuffled_prefix() -> None:
+    """Sample-efficiency subsets preserve the established deterministic selection."""
+    arrays = make_arrays()
+    seed = 42
+    expected_indices = np.sort(np.random.default_rng(seed).permutation(2)[:1])
+
+    selected = training._select_training_subset(arrays, 1, seed)
+
+    for name, values in arrays.items():
+        np.testing.assert_array_equal(selected[name], values[expected_indices])
+    assert training._select_training_subset(arrays, None, seed) is arrays
+
+
+def test_training_subset_rejects_invalid_size() -> None:
+    """Requested subsets must be nonempty and no larger than the split."""
+    arrays = make_arrays()
+    for sample_count in (0, 3):
+        with np.testing.assert_raises_regex(ValueError, "train-samples"):
+            training._select_training_subset(arrays, sample_count, 42)
+
+
+def test_normalization_matches_direct_statistics() -> None:
+    """Training normalization retains the original epsilon convention."""
+    arrays = make_arrays()
+
+    normalization = training._normalization(arrays)
+
+    assert normalization == {
+        "p0_mean": float(arrays["p0"].mean()),
+        "p0_std": float(arrays["p0"].std() + 1e-6),
+        "data_mean": float(arrays["kwave_forward"].mean()),
+        "data_std": float(arrays["kwave_forward"].std() + 1e-6),
+    }
+
+
+def test_result_root_preserves_experiment_layout(monkeypatch, tmp_path) -> None:
+    """Default, sample-efficiency, and explicit outputs retain stable locations."""
+    monkeypatch.setattr(training, "ROOT", tmp_path)
+    base = {
+        "condition": "periodic_theta89",
+        "scenario": "fno_only",
+        "seed": 17,
+        "train_samples": None,
+        "output_root": None,
+    }
+    args = SimpleNamespace(**base)
+    assert training._result_root(args, "mnist_medium_v1") == (
+        tmp_path / "results/mnist_medium/mnist_medium_v1/periodic_theta89/fno_only"
+    )
+
+    args.train_samples = 1000
+    assert training._result_root(args, "mnist_large_v1") == (
+        tmp_path
+        / "results/sample_efficiency/mnist_large_v1/periodic_theta89/fno_only"
+        / "n1000_seed17"
+    )
+
+    args.output_root = Path("/tmp/explicit_training_output")
+    assert training._result_root(args, "mnist_large_v1") == args.output_root
+
+
+def test_build_loaders_preserves_evaluation_order() -> None:
+    """Validation and test loaders retain input order without shuffling."""
+    arrays = make_arrays()
+    normalization = training._normalization(arrays)
+
+    _, validation_loader, test_loader = training._build_loaders(
+        arrays,
+        arrays,
+        arrays,
+        "fourier_to_fno",
+        normalization,
+        batch_size=1,
+        seed=123,
+    )
+
+    validation_p0 = torch.cat([batch[2] for batch in validation_loader]).numpy()
+    test_p0 = torch.cat([batch[2] for batch in test_loader]).numpy()
+    np.testing.assert_array_equal(validation_p0, arrays["p0"])
+    np.testing.assert_array_equal(test_p0, arrays["p0"])
+
+
+def test_save_test_outputs_preserves_archive_fields(tmp_path) -> None:
+    """The test archive retains predictions, targets, and sample identifiers."""
+    arrays = make_arrays()
+    prediction = arrays["kwave_forward"] + 1.0
+    target = arrays["kwave_forward"]
+
+    training._save_test_outputs(tmp_path, arrays, prediction, target)
+
+    with np.load(tmp_path / "test_predictions.npz") as saved:
+        assert saved.files == ["prediction", "target", "p0", "label", "source_index"]
+        np.testing.assert_array_equal(saved["prediction"], prediction)
+        np.testing.assert_array_equal(saved["target"], target)
+        np.testing.assert_array_equal(saved["p0"], arrays["p0"])
+        np.testing.assert_array_equal(saved["label"], arrays["label"])
+        np.testing.assert_array_equal(saved["source_index"], arrays["source_index"])
