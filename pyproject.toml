@@ -16,6 +16,7 @@ dependencies = [
     "scipy",
     "h5py",
     "matplotlib",
+    "pyyaml>=6,<7",
     "torch>=2.8,<2.12",
     "torchvision>=0.23,<0.27",
     "k-wave-python==0.5.0rc1",

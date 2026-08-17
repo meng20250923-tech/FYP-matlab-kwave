@@ -2,6 +2,7 @@ numpy>=2.2,<2.3
 scipy>=1.15,<1.16
 h5py>=3.15,<3.16
 matplotlib>=3.10,<3.11
+pyyaml>=6,<7
 torch>=2.8,<2.12
 torchvision>=0.23,<0.27
 k-wave-python==0.5.0rc1

@@ -1,0 +1,29 @@
+study: reconstruction_retention
+dataset: mnist_medium_v1
+split: test
+conditions: [periodic_theta89, pml_outside_theta45]
+retentions: [0.10, 0.25, 0.50, 1.00]
+mask_seed: 20260802
+test_samples: 1000
+bootstrap: {draws: 2000, seed: 20260805}
+gradient_descent: {iterations: 20, detailed_retention: 0.25, detailed_iterations: 80, power_iterations: 8, step: inverse_lipschitz}
+iterated_time_reversal:
+  iterations: 20
+  detailed_retention: 0.25
+  detailed_iterations: 80
+  validation_samples: {"0.10": 50, "0.25": 100, "0.50": 50, "1.00": 50}
+  candidate_steps:
+    periodic_theta89:
+      "0.10": [0.5, 1.0, 1.5, 2.0, 2.5]
+      "0.25": [0.5, 1.0, 1.5, 2.0, 2.5]
+      "0.50": [0.5, 1.0, 1.5, 2.0, 2.5]
+      "1.00": [0.1, 0.25, 0.5, 0.75, 1.0]
+    pml_outside_theta45:
+      "0.10": [0.5, 1.0, 1.5, 2.0, 2.5]
+      "0.25": [0.5, 1.0, 1.5, 2.0, 2.5]
+      "0.50": [0.5, 1.0, 1.5, 2.0, 2.5]
+      "1.00": [0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5]
+  selected_steps:
+    periodic_theta89: {"0.10": 2.0, "0.25": 1.5, "0.50": 1.5, "1.00": 0.75}
+    pml_outside_theta45: {"0.10": 2.5, "0.25": 2.0, "0.50": 2.5, "1.00": 1.75}
+learned_optimization: {updates: 200, optimizer: Adam, learning_rate: 0.03, image_range: [0.0, 1.0]}

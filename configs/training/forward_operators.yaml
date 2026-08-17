@@ -1,0 +1,10 @@
+study: forward_training
+seed: 20260728
+scenarios: [fno_only, fourier_to_fno, fno_to_fourier]
+model: {modes: 8, width: 16, layers: 3}
+optimizer: {name: AdamW, learning_rate: 0.002, weight_decay: 0.00001}
+dataset_runs:
+  medium: {dataset: mnist_medium_v1, epochs: 5, batch_size: 128}
+  large: {dataset: mnist_large_v1, epochs: 1, batch_size: 256}
+overrides:
+  large.periodic_theta89.fourier_to_fno: {epochs: 3}

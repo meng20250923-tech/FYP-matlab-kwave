@@ -1,0 +1,8 @@
+study: runtime_benchmark
+dataset: mnist_large_v1
+split: test
+conditions: [periodic_theta89, pml_outside_theta45]
+modes:
+  cpu_batch1: {device: cpu, batch_size: 1, warmup: 20, repeats: 200, include_kwave: true}
+  rtx4090_batch1: {device: cuda, batch_size: 1, warmup: 20, repeats: 200, include_kwave: false}
+  rtx4090_batch64: {device: cuda, batch_size: 64, warmup: 10, repeats: 50, include_kwave: false}

@@ -1,0 +1,10 @@
+study: sample_efficiency
+dataset: mnist_large_v1
+conditions: [periodic_theta89, pml_outside_theta45]
+scenarios: [fno_only, fourier_to_fno, fno_to_fourier]
+train_samples: [1000, 5000, 10000, 25000, 50000]
+seeds: [20260728, 20260729, 20260730]
+epochs: 5
+batch_size: 128
+model: {modes: 8, width: 16, layers: 3}
+optimizer: {name: AdamW, learning_rate: 0.002, weight_decay: 0.00001}

@@ -1,0 +1,9 @@
+study: data_generation
+seed: 20260728
+physics: {grid_size: 64, dx: 0.0001, dy: 0.0001, sound_speed: 1500.0, medium_density: 1000.0, cfl: 1.0}
+conditions:
+  periodic_theta89: {boundary: periodic, theta_deg: 89.0}
+  pml_outside_theta45: {boundary: pml, theta_deg: 45.0}
+datasets:
+  medium: {name: mnist_medium_v1, train_samples: 5000, validation_samples: 1000, test_samples: 1000, shard_size: 250}
+  large: {name: mnist_large_v1, train_samples: 50000, validation_samples: 5000, test_samples: 10000, shard_size: 250}

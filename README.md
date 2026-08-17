@@ -61,6 +61,17 @@ The GPU surrogate speed-ups relative to CPU k-Wave include hardware and batching
     examples/             Small reproducible examples
     results/              Curated summary tables and figures
 
+## Experiment configurations
+
+The versioned YAML files under `configs/` record the completed data-generation,
+forward-training, sample-efficiency, reconstruction, and runtime protocols. They
+separate the medium and large training schedules and retain the validation-selected
+ITR step for every acquisition condition and retention level.
+
+Configuration files can be validated without starting an experiment:
+
+    python -c "from pat_fno.config import load_experiment_config; print(load_experiment_config('reconstruction/retention_study.yaml')['study'])"
+
 ## Installation
 
 Using Conda:
