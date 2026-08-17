@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from ._kwave_backend_v2 import get_setting, require_kwave
+from ._backend import get_setting, require_kwave
 
 
-def kSpaceForwardKWave2D(p0: np.ndarray, setting: object) -> np.ndarray:
+def kwave_forward_2d(p0: np.ndarray, setting: object) -> np.ndarray:
     nx, ny = get_setting(setting, "Nx"), get_setting(setting, "Ny")
     if p0.shape != (nx, ny):
         raise ValueError("p0 size must be setting.Nx x setting.Ny.")

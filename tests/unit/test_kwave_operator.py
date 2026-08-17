@@ -15,13 +15,13 @@ from pat_fno.operators.kwave import (
 )
 
 forward_module = importlib.import_module(
-    "pat_fno.operators.kwave.kSpaceForwardKWave2D"
+    "pat_fno.operators.kwave.forward"
 )
 inverse_module = importlib.import_module(
-    "pat_fno.operators.kwave.kSpaceInverseKWave2D"
+    "pat_fno.operators.kwave.inverse"
 )
 adjoint_module = importlib.import_module(
-    "pat_fno.operators.kwave.kSpaceAdjointKWave2D"
+    "pat_fno.operators.kwave.adjoint"
 )
 
 CALLS: list[dict[str, Any]] = []

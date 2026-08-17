@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from ._kwave_backend_v2 import get_setting, require_kwave
+from ._backend import get_setting, require_kwave
 
 
-def kSpaceInverseKWave2D(data: np.ndarray, setting: object) -> np.ndarray:
+def kwave_inverse_2d(data: np.ndarray, setting: object) -> np.ndarray:
     nx, ny, nt = (get_setting(setting, key) for key in ("Nx", "Ny", "Nt"))
     if data.shape != (ny, nt):
         raise ValueError("data must have size Ny x Nt.")
