@@ -214,12 +214,45 @@ def _validate_runtime(config: Mapping[str, Any]) -> None:
             raise ConfigError(f"modes.{name}.warmup must be a non-negative integer.")
 
 
+def _validate_reproducibility(config: Mapping[str, Any]) -> None:
+    _keys(
+        config,
+        {
+            "study",
+            "condition",
+            "sample_data",
+            "checkpoint",
+            "expected_results",
+            "output",
+            "sample_count",
+            "retention",
+            "tolerances",
+        },
+        "reproducibility config",
+    )
+    if config["condition"] not in {"periodic_theta89", "pml_outside_theta45"}:
+        raise ConfigError("reproducibility condition is unsupported.")
+    _positive(config["sample_count"], "sample_count")
+    _fractions([config["retention"]], "retention")
+    tolerances = _keys(
+        config["tolerances"],
+        {"array_atol", "metric_atol"},
+        "tolerances",
+    )
+    for name, value in tolerances.items():
+        _positive(value, f"tolerances.{name}")
+    for name in {"sample_data", "checkpoint", "expected_results", "output"}:
+        if not isinstance(config[name], str) or not config[name].strip():
+            raise ConfigError(f"{name} must be a non-empty path string.")
+
+
 VALIDATORS = {
     "data_generation": _validate_data,
     "forward_training": _validate_forward,
     "sample_efficiency": _validate_sample_efficiency,
     "reconstruction_retention": _validate_reconstruction,
     "runtime_benchmark": _validate_runtime,
+    "reproducibility_example": _validate_reproducibility,
 }
 
 

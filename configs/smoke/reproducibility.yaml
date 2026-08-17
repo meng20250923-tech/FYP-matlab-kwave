@@ -1,0 +1,11 @@
+study: reproducibility_example
+condition: periodic_theta89
+sample_data: examples/sample_data/periodic_large_test_samples.npz
+checkpoint: examples/checkpoints/fno_only_periodic_large.pt
+expected_results: examples/expected_results/periodic_example_metrics.json
+output: results/smoke/summary.json
+sample_count: 4
+retention: 0.25
+tolerances:
+  array_atol: 1.0e-5
+  metric_atol: 1.0e-5

@@ -14,6 +14,7 @@ CONFIGS = (
     "training/sample_efficiency.yaml",
     "reconstruction/retention_study.yaml",
     "evaluation/runtime.yaml",
+    "smoke/reproducibility.yaml",
 )
 
 

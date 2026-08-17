@@ -37,8 +37,10 @@ checkpoints/
 *.npy
 *.npz
 
-# Retain the deliberately small example input
+# Retain the deliberately small reproducibility assets
 !examples/sample_data/*.npz
+!examples/checkpoints/
+!examples/checkpoints/*.pt
 
 # Experiment logs and process records
 *.log

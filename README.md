@@ -92,19 +92,35 @@ For an RTX 4090/CUDA 12.8 environment matching the recorded GPU runtime configur
 
 The project uses `k-wave-python==0.5.0rc1`, matching the version used for the reported experiments.
 
-## Quick test
+## Quick reproducibility example
 
-After installation, run:
+The repository includes four fixed large-test inputs, their k-Wave targets, a
+trained FNO-only checkpoint, 25% measurement masks, and expected metrics. The
+complete example runs on CPU without downloading MNIST or regenerating k-Wave
+data:
 
-    python examples/run_smoke_test.py
+    python -m scripts.smoke.run_reproducibility_check \
+      --config smoke/reproducibility.yaml
 
-The smoke test uses the sample input in `examples/sample_data/` and does not require the full MNIST datasets or trained checkpoints.
+The command recomputes the analytical Fourier predictions, evaluates the supplied
+FNO-only checkpoint, applies the saved masks, performs Fourier inverse
+reconstruction, and compares all metrics with fixed expected results. A successful
+run ends with `Overall reproducibility check: PASS` and writes
+`results/smoke/summary.json`.
+
+The same workflow is available as an opt-in integration test:
+
+    python -m pytest tests/integration -m slow
 
 ## Reproducing the experiments
 
-The command-line entry points are located in `scripts/`. Commands for dataset generation, model training, forward evaluation, runtime benchmarking, reconstruction, and result analysis will be documented here alongside the finalised scripts.
+The command-line entry points in `scripts/` cover dataset generation, model
+training, forward evaluation, runtime benchmarking, reconstruction, and result
+analysis. Versioned protocols are stored under `configs/`.
 
-Large-scale experiments require the complete MNIST-derived PAT datasets and trained checkpoints, which are not stored in Git because of their size.
+Large-scale experiments require the complete MNIST-derived PAT datasets and full
+sets of trained checkpoints, which are not stored in Git because of their size.
+Only the small checkpoint required by the reproducibility example is included.
 
 ## Results
 

@@ -1,0 +1,26 @@
+{
+  "condition": "periodic_theta89",
+  "sample_count": 4,
+  "source_indices": [
+    2253,
+    7962,
+    9832,
+    6563
+  ],
+  "actual_retention": 0.24716689560439561,
+  "fourier_forward": {
+    "rel_l2_mean": 0.9356168210506439,
+    "centered_corr_mean": 0.8111807714223238,
+    "mse": 0.07202651351690292
+  },
+  "fno_only_forward": {
+    "rel_l2_mean": 0.39445729553699493,
+    "centered_corr_mean": 0.8875942998095103,
+    "mse": 0.01324007660150528
+  },
+  "fourier_inverse": {
+    "rel_l2_mean": 0.8841675519943237,
+    "centered_corr_mean": 0.46023128467804875,
+    "mse": 0.08072108775377274
+  }
+}

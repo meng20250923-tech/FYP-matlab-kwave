@@ -41,6 +41,9 @@ addopts = [
 filterwarnings = [
     "error",
 ]
+markers = [
+    "slow: opt-in integration tests that run the fixed reproducibility example",
+]
 
 [tool.coverage.run]
 source = ["pat_fno"]
