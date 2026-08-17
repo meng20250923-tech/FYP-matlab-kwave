@@ -1,7 +1,17 @@
-"""Python implementations of the limited-angle Fourier PAT operators."""
+"""NumPy reference implementations of the Fourier PAT operators."""
 
-from .kSpaceAdjointMirrorFFT2D import kSpaceAdjointMirrorFFT2D
-from .kSpaceForwardMirrorFFT2D import kSpaceForwardMirrorFFT2D
-from .kSpaceInverseMirrorFFT2D import kSpaceInverseMirrorFFT2D
+from pat_fno.operators.fourier.numpy_reference.adjoint import (
+    numpy_adjoint_2d,
+)
+from pat_fno.operators.fourier.numpy_reference.forward import (
+    numpy_forward_2d,
+)
+from pat_fno.operators.fourier.numpy_reference.inverse import (
+    numpy_inverse_2d,
+)
 
-__all__ = ["kSpaceForwardMirrorFFT2D", "kSpaceAdjointMirrorFFT2D", "kSpaceInverseMirrorFFT2D"]
+__all__ = [
+    "numpy_adjoint_2d",
+    "numpy_forward_2d",
+    "numpy_inverse_2d",
+]

@@ -5,11 +5,11 @@ from __future__ import annotations
 import numpy as np
 from scipy.interpolate import griddata
 
-from ._fft_utils import get_setting, kgrid, unitary_fft2
-from .triginterp import triginterp
+from ._utils import get_setting, kgrid, unitary_fft2
+from .interpolation import triginterp
 
 
-def kSpaceForwardMirrorFFT2D(p: np.ndarray, setting: object) -> np.ndarray:
+def numpy_forward_2d(p: np.ndarray, setting: object) -> np.ndarray:
     method = get_setting(setting, "computation.interpolationMethodF")
     theta_max = get_setting(setting, "computation.theta_max")
     c = get_setting(setting, "soundSpeed")

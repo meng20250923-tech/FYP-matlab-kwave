@@ -5,10 +5,10 @@ from __future__ import annotations
 import numpy as np
 from scipy.interpolate import griddata
 
-from ._fft_utils import get_setting, kgrid, unitary_fft2, unitary_ifft2
+from ._utils import get_setting, kgrid, unitary_fft2, unitary_ifft2
 
 
-def kSpaceInverseMirrorFFT2D(f: np.ndarray, setting: object) -> np.ndarray:
+def numpy_inverse_2d(f: np.ndarray, setting: object) -> np.ndarray:
     method = get_setting(setting, "computation.interpolationMethodI")
     theta_max, c = get_setting(setting, "computation.theta_max"), get_setting(setting, "soundSpeed")
     nx, ny = get_setting(setting, "Nx"), get_setting(setting, "Ny")
