@@ -31,9 +31,10 @@ METHOD = {
 }
 
 
-def rows(path):
-    with path.open(newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+def read_csv_rows(path: Path) -> list[dict[str, str]]:
+    """Read a CSV file into a list of string-valued row dictionaries."""
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
 
 
 def save(name, text):
@@ -45,14 +46,16 @@ def save(name, text):
     (OUT / f"{name}.tex").write_text(output, encoding="utf-8")
 
 
-def f(x, n=4):
-    x = float(x)
-    if abs(x) < 0.01 and x != 0:
-        return f"{x:.2e}"
-    return f"{x:.{n}f}"
+def format_number(value: float | str, decimal_places: int = 4) -> str:
+    """Format a table value in fixed-point or scientific notation."""
+    value = float(value)
+    if abs(value) < 0.01 and value != 0:
+        return f"{value:.2e}"
+    return f"{value:.{decimal_places}f}"
 
 
-def table(caption, label, body, size="\\small"):
+def latex_table(caption: str, label: str, body: str, size: str = "\\small") -> str:
+    """Wrap a generated tabular body in a complete LaTeX table environment."""
     return f"""\\begin{{table}}[H]
 \\centering
 {size}
@@ -67,7 +70,7 @@ def generate_method_taxonomy() -> None:
     # 1 Method taxonomy
     save(
         "01_method_taxonomy",
-        table(
+        latex_table(
             "Taxonomy of the evaluated forward operators and placement of learned corrections.",
             "tab:method-cost",
             r"""\resizebox{\linewidth}{!}{%
@@ -90,7 +93,7 @@ def generate_acquisition_table() -> None:
     """Generate the physical acquisition and dataset table."""
     save(
         "02_acquisition",
-        table(
+        latex_table(
             "Physical grid, acquisition geometry and dataset sizes used by the completed experiments.",
             "tab:acquisition-config",
             r"""\begin{tabular}{lcc}
@@ -116,7 +119,7 @@ def generate_protocol_tables() -> None:
     """Generate the forward-training and reconstruction protocol tables."""
     save(
         "03_forward_protocol",
-        table(
+        latex_table(
             "Forward-operator training protocol. Values are read from the completed training histories.",
             "tab:forward-protocol",
             r"""\begin{tabular}{lcc}
@@ -134,7 +137,7 @@ def generate_protocol_tables() -> None:
 
     save(
         "04_reconstruction_protocol",
-        table(
+        latex_table(
             "Reconstruction and subsampling protocol. Values are read from the completed reconstruction records.",
             "tab:reconstruction-protocol",
             r"""\begin{tabular}{ll}
@@ -189,13 +192,13 @@ def generate_forward_accuracy_table() -> None:
             else "& & "
         )
         best = name == "Fourier-to-FNO"
-        vals = [f(rl), f(co), f"{float(ms):.6f}"]
+        vals = [format_number(rl), format_number(co), f"{float(ms):.6f}"]
         if best:
             vals = [f"\\textbf{{{v}}}" for v in vals]
         lines.append(prefix + name + " & " + " & ".join(vals) + r" \\")
     save(
         "04_forward_accuracy",
-        table(
+        latex_table(
             "Held-out forward accuracy. Medium and large test sets contain 1,000 and 10,000 images, respectively. Bold denotes the best method within each scale and condition; each learned checkpoint is from one completed training seed.",
             "tab:forward-results",
             """\\setlength{\\tabcolsep}{3.2pt}
@@ -214,7 +217,7 @@ def generate_forward_accuracy_table() -> None:
 
 def generate_sample_efficiency_table() -> None:
     """Generate the sample-efficiency table."""
-    se = rows(
+    se = read_csv_rows(
         RESULTS / "evaluation/mnist_large_v1/required_experiments/sample_efficiency_summary.csv"
     )
     lookup = {(r["condition"], r["model"], int(r["train_samples"])): r for r in se}
@@ -241,7 +244,7 @@ def generate_sample_efficiency_table() -> None:
             )
     save(
         "05_sample_efficiency",
-        table(
+        latex_table(
             "Forward relative $L_2$ error across five training-set sizes, reported as mean $\\pm$ SD over three independent training seeds. The final column gives the first tested size whose across-seed mean is at most 0.22; the threshold is descriptive rather than a universal sample-complexity constant.",
             "tab:efficiency-final",
             r"""\resizebox{\linewidth}{!}{%
@@ -269,7 +272,7 @@ def generate_runtime_table() -> None:
     rt = {}
     for mode, (suffix, _batch) in sources.items():
         for c in COND:
-            for r in rows(RESULTS / f"evaluation/mnist_large_v1/runtime/{c}_{suffix}.csv"):
+            for r in read_csv_rows(RESULTS / f"evaluation/mnist_large_v1/runtime/{c}_{suffix}.csv"):
                 rt[mode, c, r["method"]] = r
     order = ["Fourier", "fno_only", "fourier_to_fno", "fno_to_fourier", "k-Wave"]
     disp = {
@@ -295,7 +298,7 @@ def generate_runtime_table() -> None:
         lines.append("\\addlinespace")
     save(
         "06_runtime",
-        table(
+        latex_table(
             "Forward runtime in milliseconds per sample. CPU and RTX 4090 batch-one measurements use 200 repetitions after 20 warm-up calls; RTX 4090 batch-64 measurements use 50 repetitions after 10 warm-up calls. CPU batch-one speed-ups are hardware controlled. GPU speed-ups use the contemporaneously measured CPU \\kwave{} reference and therefore describe the implemented system rather than intrinsic algorithmic acceleration. The three learned models each contain 100,337 trainable parameters and occupy approximately 783 kB.",
             "tab:runtime-final",
             r"""\resizebox{\linewidth}{!}{%
@@ -333,7 +336,7 @@ def generate_itr_selection_table() -> None:
         )
     save(
         "07_itr_selection",
-        table(
+        latex_table(
             "Validation-only selection of the iterated time-reversal step. The selected value is subsequently frozen for test evaluation; $n$ denotes validation images.",
             "tab:itr-selection",
             r"""\begin{tabular}{lclrrr}
@@ -351,7 +354,7 @@ def generate_itr_selection_table() -> None:
 
 def load_reconstruction_uncertainty() -> dict[tuple[str, float, str], dict[str, str]]:
     """Load reconstruction uncertainty rows indexed by experiment identity."""
-    unc = rows(
+    unc = read_csv_rows(
         RESULTS
         / "evaluation/mnist_medium_v1/required_experiments/reconstruction_with_uncertainty.csv"
     )
@@ -368,7 +371,7 @@ def generate_reconstruction_25_table(
         for j, m in enumerate(METHOD):
             r = U[c, 0.25, m]
             rel = f"{float(r['relative_l2_mean']):.4f} [{float(r['relative_l2_ci95_low']):.4f}, {float(r['relative_l2_ci95_high']):.4f}]"
-            vals = [rel, f(r["correlation_mean"]), f(r["mse_mean"], 5)]
+            vals = [rel, format_number(r["correlation_mean"]), format_number(r["mse_mean"], 5)]
             isbest = m == "Gradient descent (1/L)"
             if isbest:
                 vals = [f"\\textbf{{{x}}}" for x in vals]
@@ -379,7 +382,7 @@ def generate_reconstruction_25_table(
             lines.append("\\addlinespace")
     save(
         "08_reconstruction_25",
-        table(
+        latex_table(
             "Reconstruction at 25\\% measurement retention on 1,000 test images. Relative $L_2$ is reported as mean [bootstrap 95\\% CI] using 2,000 resamples; correlation and MSE are means. Bold denotes the best value within each condition.",
             "tab:reconstruction-results",
             r"""\resizebox{\linewidth}{!}{%
@@ -417,7 +420,7 @@ def generate_reconstruction_robustness_table(
             lines.append("\\addlinespace")
     save(
         "09_robustness",
-        table(
+        latex_table(
             "Reconstruction robustness across retained measurements. Entries are mean relative $L_2$ [bootstrap 95\\% CI] over 1,000 test images and 2,000 bootstrap resamples.",
             "tab:retention-robustness",
             r"""\resizebox{\linewidth}{!}{%
@@ -437,7 +440,7 @@ def generate_reconstruction_robustness_table(
 
 def generate_convergence_diagnostic_tables() -> None:
     """Generate the Lipschitz and finite-iteration diagnostic tables."""
-    lip = rows(
+    lip = read_csv_rows(
         RESULTS / "evaluation/mnist_medium_v1/required_experiments/lipschitz_step_size_summary.csv"
     )
     liplines = []
@@ -446,7 +449,9 @@ def generate_convergence_diagnostic_tables() -> None:
         liplines.append(
             f"{COND[r['condition']]} & {ret} & {float(r['lipschitz_mean']):.3f} $\\pm$ {float(r['lipschitz_std']):.3f} & {float(r['step_size_mean']):.3f} $\\pm$ {float(r['step_size_std']):.3f} \\\\"
         )
-    conv = rows(RESULTS / "evaluation/mnist_medium_v1/required_experiments/convergence_fits.csv")
+    conv = read_csv_rows(
+        RESULTS / "evaluation/mnist_medium_v1/required_experiments/convergence_fits.csv"
+    )
     convlines = []
     for r in conv:
         if abs(float(r["keep_fraction"]) - 0.25) > 1e-9:
@@ -461,7 +466,7 @@ def generate_convergence_diagnostic_tables() -> None:
         )
     save(
         "11_lipschitz_steps",
-        table(
+        latex_table(
             "Power-iteration estimates of the Lipschitz constant and the resulting gradient-descent step. Values are mean $\\pm$ SD over 1,000 test images.",
             "tab:lipschitz-steps",
             r"""\begin{tabular}{lccc}
@@ -478,7 +483,7 @@ def generate_convergence_diagnostic_tables() -> None:
 
     save(
         "12_convergence_fits",
-        table(
+        latex_table(
             "Descriptive semilog and log--log regression fits at 25\\% retention. The finite-iteration slopes are diagnostics rather than theoretical convergence orders.",
             "tab:convergence-fits",
             r"""\resizebox{\linewidth}{!}{%

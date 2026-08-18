@@ -97,6 +97,11 @@ Alternatively, install the common dependencies with pip:
     python -m pip install -r requirements.txt
     python -m pip install -e .
 
+To run the automated tests and code-quality checks, install the development
+dependencies instead:
+
+    python -m pip install -e ".[dev]"
+
 For an RTX 4090/CUDA 12.8 environment matching the recorded GPU runtime configuration:
 
     python -m pip install -r requirements-gpu.txt
@@ -123,6 +128,23 @@ run ends with `Overall reproducibility check: PASS` and writes
 The same workflow is available as an opt-in integration test:
 
     python -m pytest tests/integration -m slow
+
+## Testing and code quality
+
+The fast unit suite checks numerical operators, configuration validation, data
+handling, training, reconstruction, and evaluation utilities:
+
+    python -m pytest tests/unit -q
+
+The fixed end-to-end example is exercised separately because it loads the
+included checkpoint and sample archive:
+
+    python -m pytest tests/integration -m slow
+
+Formatting and static checks are run with Ruff:
+
+    ruff format --check .
+    ruff check .
 
 ## Reproducing the experiments
 

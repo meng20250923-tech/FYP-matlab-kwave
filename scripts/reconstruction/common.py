@@ -12,10 +12,12 @@ from pat_fno.data.mnist import ROOT
 
 
 def reconstruction_tag(condition: str, split: str, keep_fraction: float, seed: int) -> str:
+    """Return the deterministic filename tag for one reconstruction run."""
     return f"{condition}_{split}_keep{keep_fraction:.2f}_seed{seed}"
 
 
 def subsampled_path(args: argparse.Namespace, condition: str) -> Path:
+    """Return the saved incomplete-measurement path for one condition."""
     return (
         ROOT
         / "results"
@@ -32,6 +34,7 @@ def load_subsampled(
     *,
     include_mask: bool = False,
 ) -> dict[str, np.ndarray]:
+    """Load a bounded number of samples from an incomplete-data archive."""
     if not path.exists():
         raise FileNotFoundError(f"Missing subsampled data: {path}")
     if max_samples <= 0:

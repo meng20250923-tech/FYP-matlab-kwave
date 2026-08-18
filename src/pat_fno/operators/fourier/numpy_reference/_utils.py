@@ -35,8 +35,10 @@ def kgrid(nx: int, dx: float, ny: int, dy: float) -> tuple[np.ndarray, np.ndarra
 
 
 def unitary_fft2(values: np.ndarray) -> np.ndarray:
+    """Return the orthonormal two-dimensional discrete Fourier transform."""
     return np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(values))) / math.sqrt(values.size)
 
 
 def unitary_ifft2(values: np.ndarray) -> np.ndarray:
+    """Return the orthonormal inverse two-dimensional Fourier transform."""
     return np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(values))) * math.sqrt(values.size)

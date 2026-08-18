@@ -232,9 +232,7 @@ def k_space_adjoint_mirror_fft_2d(data, theta_max, c, N, d, dt):
     W, KY = torch.meshgrid(w, ky, indexing="ij")
     P = P * (torch.abs(W) >= torch.abs(c * KY)).to(cdt)  # evanescent cutoff
 
-    # MATLAB adjoint scaling:
-    #     sf = c * ones(size(ky_max));
-    #     sf(~mask_beta) = 0;
+    # Apply the constant reference-adjoint scaling within the angular mask.
     ky_max = torch.abs((W / c) * math.sin(theta_max))
     sf = c * (torch.abs(KY) <= ky_max).to(rdt)
     P_scaled = P * sf.to(cdt)

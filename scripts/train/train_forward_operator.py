@@ -110,6 +110,8 @@ def _resize_p0(values: torch.Tensor, output_hw: tuple[int, int]) -> torch.Tensor
 
 
 class ForwardDataset(torch.utils.data.Dataset):
+    """Present normalized source, target, and pressure tensors for FNO training."""
+
     def __init__(
         self,
         arrays: dict[str, np.ndarray],

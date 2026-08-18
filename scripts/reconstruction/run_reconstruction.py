@@ -25,6 +25,7 @@ METHODS = (
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse reconstruction method, data, iteration, and output options."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--method", choices=METHODS, required=True)
     parser.add_argument("--dataset", default="mnist_medium_v1")
@@ -125,6 +126,7 @@ def _save_convergence(path: Path, residual: np.ndarray, error: np.ndarray) -> No
 
 
 def run_fourier(args: argparse.Namespace, condition: str) -> None:
+    """Run analytical Fourier inversion and save reconstructions and metrics."""
     output = ROOT / "results" / "reconstruction" / args.dataset / "fourier"
     output.mkdir(parents=True, exist_ok=True)
     tag, result_path, metrics_path = _paths(args, condition, output)
@@ -167,6 +169,7 @@ def run_fourier(args: argparse.Namespace, condition: str) -> None:
 
 
 def run_direct(args: argparse.Namespace, condition: str, *, adjoint: bool) -> None:
+    """Run one direct k-Wave time-reversal or reference-adjoint reconstruction."""
     directory = "adjoint" if adjoint else "time_reversal"
     label = "Adjoint" if adjoint else "TR"
     method_name = "k-wave adjoint" if adjoint else "k-wave time reversal"
@@ -226,6 +229,7 @@ def run_direct(args: argparse.Namespace, condition: str, *, adjoint: bool) -> No
 
 
 def estimate_lipschitz(mask: np.ndarray, setting: object, iterations: int) -> float:
+    """Estimate the masked k-Wave normal-operator norm by power iteration."""
     rng = np.random.default_rng(20260802)
     vector = rng.standard_normal((setting.Nx, setting.Ny))
     vector /= np.linalg.norm(vector)
@@ -298,6 +302,7 @@ def _run_iterative_sample(
 
 
 def run_iterative(args: argparse.Namespace, condition: str, *, gradient_descent: bool) -> None:
+    """Run k-Wave gradient descent or iterated time reversal for one condition."""
     directory, suffix = _iterative_method_configuration(args, gradient_descent)
     output = ROOT / "results" / "reconstruction" / args.dataset / directory
     output.mkdir(parents=True, exist_ok=True)
@@ -456,6 +461,7 @@ def _optimise_learned_sample(
 
 
 def run_learned(args: argparse.Namespace, condition: str) -> None:
+    """Optimise images with one frozen learned forward operator and save results."""
     import torch
 
     if args.scenario is None:
@@ -543,6 +549,7 @@ def run_learned(args: argparse.Namespace, condition: str) -> None:
 
 
 def main() -> None:
+    """Dispatch the requested reconstruction workflow across selected conditions."""
     args = parse_args()
     for condition in conditions(args.condition):
         if args.method == "fourier":

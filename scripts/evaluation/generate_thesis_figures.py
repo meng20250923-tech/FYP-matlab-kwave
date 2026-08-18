@@ -138,6 +138,7 @@ def line_figure(
     yscale: str = "linear",
     intervals: list[tuple[np.ndarray, np.ndarray]] | None = None,
 ) -> None:
+    """Plot labeled line series with optional uncertainty intervals and axis scales."""
     figure, axis = plt.subplots()
     markers = ("o", "s", "^", "D", "v", "P", "X")
     for index, (label, values) in enumerate(series):
@@ -184,6 +185,7 @@ def load_forward_sample(
 
 
 def plot_sample_efficiency(output: Path) -> None:
+    """Plot forward error against training-set size for each acquisition condition."""
     data = read_csv(
         ROOT
         / "results/evaluation/mnist_large_v1/required_experiments/sample_efficiency_summary.csv"
@@ -262,6 +264,7 @@ def plot_training_curves(output: Path) -> None:
 
 
 def plot_runtime(output: Path) -> None:
+    """Plot per-sample CPU and GPU runtimes for the evaluated forward operators."""
     methods = ("Fourier", "fno_only", "fourier_to_fno", "fno_to_fourier", "k-Wave")
     labels = ("Fourier", "FNO-only", "Fourier-to-FNO", "FNO-to-Fourier", "k-Wave")
     modes = (
@@ -363,6 +366,7 @@ def plot_reconstruction_metrics(output: Path) -> None:
 
 
 def reconstruction_path(condition: str, fraction: float, method: str) -> Path:
+    """Return the result archive for one method, condition, and retention level."""
     directory, special = METHOD_PATHS[method]
     tag = f"{condition}_test_keep{fraction:.2f}_seed20260802"
     if special == "step":
@@ -477,6 +481,7 @@ def plot_convergence_panels(output: Path) -> None:
 
 
 def plot_convergence(output: Path) -> None:
+    """Plot semilog and log-log GD and ITR trajectories for every retention level."""
     for condition in CONDITIONS:
         for fraction in RETENTION_FRACTIONS:
             histories: dict[str, dict[str, np.ndarray]] = {}
@@ -551,6 +556,7 @@ def _large_initial_pressure(sample_index: int) -> np.ndarray:
 
 
 def plot_forward_error_ecdf(output: Path) -> None:
+    """Plot empirical distributions of large-test forward relative errors."""
     labels = ("Fourier", "FNO-only", "Fourier-to-FNO", "FNO-to-Fourier")
     scenarios = (None, *(scenario for scenario, _ in LEARNED_FORWARD_SCENARIOS))
     colors = ("#6B7280", "#2563EB", "#059669", "#0891B2")
@@ -721,6 +727,7 @@ def plot_forward_sensor_traces(output: Path, sample_index: int) -> None:
 
 
 def plot_reconstruction_keep025_comparison(output: Path) -> None:
+    """Compare reconstruction relative errors at 25 percent measurement retention."""
     rows = read_csv(
         ROOT
         / "results/evaluation/mnist_medium_v1"
@@ -938,6 +945,7 @@ def plot_fno_block(output: Path) -> None:
 
 
 def plot_reconstruction_keep025_correlation(output: Path) -> None:
+    """Compare reconstruction correlations at 25 percent measurement retention."""
     rows = read_csv(
         ROOT
         / "results/evaluation/mnist_medium_v1"
