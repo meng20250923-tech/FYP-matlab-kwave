@@ -7,6 +7,7 @@ name = "pat-fno"
 version = "0.1.0"
 description = "Fourier-guided neural-operator surrogates for photoacoustic tomography"
 readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.10,<3.13"
 authors = [
     {name = "Mengjie Mao"}
