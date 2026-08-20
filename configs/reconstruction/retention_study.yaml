@@ -26,4 +26,10 @@ iterated_time_reversal:
   selected_steps:
     periodic_theta89: {"0.10": 2.0, "0.25": 1.5, "0.50": 1.5, "1.00": 0.75}
     pml_outside_theta45: {"0.10": 2.5, "0.25": 2.0, "0.50": 2.5, "1.00": 1.75}
-learned_optimization: {updates: 200, optimizer: Adam, learning_rate: 0.03, image_range: [0.0, 1.0]}
+learned_optimization:
+  optimizer: Adam
+  image_range: [0.0, 1.0]
+  default: {updates: 200, learning_rate: 0.03}
+  overrides:
+    fno_only:
+      "0.25": {updates: 100, learning_rate: 0.003, selected_on: validation}

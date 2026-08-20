@@ -5,6 +5,8 @@
 This repository contains the Python implementation developed for an MSc dissertation in Scientific and Data Intensive Computing at University College London.
 
 The project investigates whether Fourier neural operators can provide fast forward surrogates for photoacoustic tomography (PAT), and whether these surrogates remain reliable when used in reconstruction from incomplete measurements.
+The accompanying project website presents the methods, principal results, and reproducibility workflow: [Project website](https://meng20250923-tech.github.io/FYP-matlab-kwave/).
+
 
 ## Methods
 

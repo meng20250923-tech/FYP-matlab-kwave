@@ -193,13 +193,47 @@ def _validate_reconstruction(config: Mapping[str, Any]) -> None:
                     raise ConfigError(f"ITR {field}.{condition}.{retention} must be positive.")
     learned = _keys(
         config["learned_optimization"],
-        {"updates", "optimizer", "learning_rate", "image_range"},
+        {"optimizer", "image_range", "default", "overrides"},
         "learned_optimization",
     )
-    _positive(learned["updates"], "learned_optimization.updates")
-    _positive(learned["learning_rate"], "learned_optimization.learning_rate")
     if learned["image_range"] != [0.0, 1.0]:
         raise ConfigError("learned_optimization.image_range must be [0.0, 1.0].")
+    default = _keys(
+        learned["default"],
+        {"updates", "learning_rate"},
+        "learned_optimization.default",
+    )
+    _positive(default["updates"], "learned_optimization.default.updates")
+    _positive(default["learning_rate"], "learned_optimization.default.learning_rate")
+    overrides = _keys(
+        learned["overrides"],
+        {"fno_only"},
+        "learned_optimization.overrides",
+    )
+    for scenario, entries in overrides.items():
+        for retention, entry in entries.items():
+            if retention not in retention_keys:
+                raise ConfigError(
+                    f"learned_optimization.overrides.{scenario} contains an unknown retention."
+                )
+            values = _keys(
+                entry,
+                {"updates", "learning_rate", "selected_on"},
+                f"learned_optimization.overrides.{scenario}.{retention}",
+            )
+            _positive(
+                values["updates"],
+                f"learned_optimization.overrides.{scenario}.{retention}.updates",
+            )
+            _positive(
+                values["learning_rate"],
+                f"learned_optimization.overrides.{scenario}.{retention}.learning_rate",
+            )
+            if values["selected_on"] != "validation":
+                raise ConfigError(
+                    f"learned_optimization.overrides.{scenario}.{retention}.selected_on "
+                    "must be 'validation'."
+                )
 
 
 def _validate_runtime(config: Mapping[str, Any]) -> None:

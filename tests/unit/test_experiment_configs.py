@@ -45,6 +45,21 @@ def test_reconstruction_config_records_final_itr_steps():
     }
 
 
+def test_reconstruction_config_records_final_learned_optimisation():
+    config = load_experiment_config("reconstruction/retention_study.yaml")
+    learned = config["learned_optimization"]
+    assert learned["default"] == {"updates": 200, "learning_rate": 0.03}
+    assert learned["overrides"] == {
+        "fno_only": {
+            "0.25": {
+                "updates": 100,
+                "learning_rate": 0.003,
+                "selected_on": "validation",
+            }
+        }
+    }
+
+
 def test_unknown_top_level_field_is_rejected(tmp_path):
     config = deepcopy(load_experiment_config("evaluation/runtime.yaml"))
     config["unexpected"] = True

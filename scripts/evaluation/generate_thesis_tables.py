@@ -150,7 +150,8 @@ def generate_protocol_tables() -> None:
     Iterated-TR iterations & $20$ (robustness), $80$ (detailed 25\%) \\
     Iterated-TR step at 25\%, periodic/PML & $1.5/2.0$ \\
     Iterated-TR step at 100\%, periodic/PML & $0.75/1.75$ \\
-    Learned optimisation & $200$ Adam steps, learning rate $3\times10^{-2}$ \\
+    Learned optimisation (default) & $200$ Adam steps, learning rate $3\times10^{-2}$ \\
+    FNO-only at 25\% retention & $100$ Adam steps, learning rate $3\times10^{-3}$ \\
     Image constraint & projection to $[0,1]$ \\
     \bottomrule
     \end{tabular}""",

@@ -36,7 +36,7 @@ PDF versions of both figures are included for lossless inspection and reuse.
 - `table2_forward_accuracy.csv` is derived from the final medium- and large-benchmark comparison records and contains 1,000- and 10,000-image test results, respectively.
 - `table3_sample_efficiency.csv` is the final 30-row summary of three operators, five training-set sizes, two acquisition conditions, and three independent training seeds.
 - `table4_runtime.csv` combines the reported CPU batch-one, RTX 4090 batch-one, and RTX 4090 batch-64 benchmark records. The contemporaneous CPU k-Wave measurements used as GPU speed-up references remain in the file.
-- `table8_reconstruction_robustness.csv` contains all seven reconstruction methods, both acquisition conditions, four retention levels, 1,000 test images, and 2,000-resample bootstrap intervals.
+- `table8_reconstruction_robustness.csv` contains all seven reconstruction methods, both acquisition conditions, four retention levels, 1,000 test images, and 2,000-resample bootstrap intervals. Learned reconstructions use 200 Adam updates at a learning rate of $3\times10^{-2}$ by default. At 25% retention, validation-selected FNO-only instead uses 100 updates at $3\times10^{-3}$.
 
 The CSV files retain full-precision values. The dissertation tables round these values for presentation.
 
