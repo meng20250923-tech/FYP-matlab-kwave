@@ -199,14 +199,12 @@ def test_learned_prediction_paths_preserve_output_domain(
     monkeypatch.setattr(
         reconstruction,
         "fpat_forward_2d",
-        lambda image, theta, sound_speed, nt, spacing, dt: (
-            torch.nn.functional.interpolate(
-                image[None, None],
-                size=(6, nt),
-                mode="bilinear",
-                align_corners=False,
-            )[0, 0]
-        ),
+        lambda image, theta, sound_speed, nt, spacing, dt: torch.nn.functional.interpolate(
+            image[None, None],
+            size=(6, nt),
+            mode="bilinear",
+            align_corners=False,
+        )[0, 0],
     )
     setting = SimpleNamespace(
         Ny=6,

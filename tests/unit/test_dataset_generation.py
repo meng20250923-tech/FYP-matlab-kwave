@@ -123,15 +123,10 @@ def test_generate_condition_keeps_pool_and_split_order(tmp_path, monkeypatch):
     monkeypatch.setattr(
         generation,
         "generate_split_shards",
-        lambda pool,
-        output,
-        condition,
-        split,
-        arrays,
-        shard_size,
-        workers,
-        current_setting: calls.append(
-            (pool, output, condition, split, arrays, shard_size, workers, current_setting)
+        lambda pool, output, condition, split, arrays, shard_size, workers, current_setting: (
+            calls.append(
+                (pool, output, condition, split, arrays, shard_size, workers, current_setting)
+            )
         ),
     )
     monkeypatch.setattr(
