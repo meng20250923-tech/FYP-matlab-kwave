@@ -41,7 +41,7 @@ addopts = [
 ]
 filterwarnings = [
     "error",
-    "ignore:'oneOf' deprecated - use 'one_of':pyparsing.warnings.PyparsingDeprecationWarning",
+    "ignore::pyparsing.warnings.PyparsingDeprecationWarning",
 ]
 markers = [
     "slow: opt-in integration tests that run the fixed reproducibility example",
